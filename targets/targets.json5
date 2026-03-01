@@ -4836,6 +4836,65 @@ mode is recommended for target MCUs with small amounts of flash and RAM.",
          },
          "is_mcu_family_target": true
      },
+    "MIMXRT106X": {
+        "core": "Cortex-M7FD",
+        "public": false,
+        "extra_labels": [
+            "NXP",
+            "MCUXpresso_MCUS",
+            "IMX",
+            "NXP_EMAC",
+            "USB",
+            "MIMXRT106X"
+        ],
+        "macros": [
+            "CPU_MIMXRT1062DVL6B",
+            "FSL_RTOS_MBED",
+            "XIP_BOOT_HEADER_ENABLE=1",
+            "XIP_EXTERNAL_FLASH=1",
+            "FSL_SDK_DRIVER_QUICK_ACCESS_ENABLE=1",
+            "SKIP_SYSCLK_INIT",
+            "__STARTUP_INITIALIZE_RAMFUNCTION",
+            "__STARTUP_INITIALIZE_NONCACHEDATA",
+            "MBED_MPU_CUSTOM",
+            "MBED_TICKLESS",
+            "DATA_SECTION_IS_CACHEABLE=1",
+            "MBED_SPLIT_HEAP"
+        ],
+        "inherits": [
+            "Target"
+        ],
+        "device_has": [
+            "RTC",
+            "SLEEP",
+            "USTICKER",
+            "ANALOGIN",
+            "EMAC",
+            "I2C",
+            "I2CSLAVE",
+            "INTERRUPTIN",
+            "PORTIN",
+            "PORTINOUT",
+            "PORTOUT",
+            "PWMOUT",
+            "SERIAL",
+            "SPI",
+            "SPISLAVE",
+            "TRNG",
+            "WATCHDOG",
+            "USBDEVICE"
+        ],
+        "overrides": {
+            "deep-sleep-latency": 10
+        },
+         "config": {
+             "enable-overdrive-mode": {
+                 "help": "Enable 'overdrive mode' and raise core clock from 528MHz to 600MHz.  Only allowed on MIMXRT10xxD parts, not MIMXRT10xxC",
+                 "value": 1
+             }
+         },
+         "is_mcu_family_target": true
+     },
     "MIMXRT1050_EVK": {
         "inherits": [
             "MIMXRT105X"
@@ -4898,6 +4957,60 @@ mode is recommended for target MCUs with small amounts of flash and RAM.",
         "extra_labels_add": [
             "EVK",
             "1060_EVK",
+            "MIMXRT1060"
+        ],
+        "supported_form_factors": [
+            "ARDUINO_UNO"
+        ],
+        "macros_add": [
+            "XIP_BOOT_HEADER_DCD_ENABLE=1",
+            "FSL_FEATURE_PHYKSZ8081_USE_RMII50M_MODE"
+        ],
+        "device_has_add": [
+            "FLASH"
+        ],
+        "overrides": {
+            "network-default-interface-type": "ETHERNET"
+        },
+        "memory_banks": {
+            "SDRAM": {
+                "access": {
+                    "execute": false,
+                    "peripheral": false,
+                    "read": true,
+                    "secure": false,
+                    "write": true
+                },
+                "default": false,
+                "size": 0x10000000, // 256MiB
+                "start": 0x80000000,
+                "startup": false
+            },
+            // MIMXRT1060 EVK uses QSPI flash by default
+            "EXT_FLASH": {
+                "access": {
+                    "execute": true,
+                    "peripheral": false,
+                    "read": true,
+                    "secure": false,
+                    "write": false
+                },
+                "default": true,
+                "size": 0x800000, // 8MiB
+                "start": 0x60000000,
+                "startup": true
+            }
+        },
+        "device_name": "MIMXRT1062DVL6B",
+        "image_url": "https://www.nxp.com/assets/images/en/dev-board-image/X-MIMXRT1060-EVK-BOARD-BOTTOM.jpg"
+    },
+    "MIMXRT1060_EVKB": {
+        "inherits": [
+            "MIMXRT106X"
+        ],
+        "extra_labels_add": [
+            "EVK",
+            "1060_EVKB",
             "MIMXRT1060"
         ],
         "supported_form_factors": [

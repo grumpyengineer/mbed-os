@@ -196,6 +196,9 @@
         "MIMXRT105X": {
             "mem-size": 36560
         },
+        "MIMXRT106X": {
+            "mem-size": 36560
+        },
         "STM32H747_ARDUINO": {
             "mem-size": 16000
         },
