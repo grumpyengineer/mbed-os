@@ -485,6 +485,7 @@ outputs:
 - {id: ENET_25M_REF_CLK.outFreq, value: 1.2 MHz}
 - {id: FLEXIO1_CLK_ROOT.outFreq, value: 30 MHz}
 - {id: FLEXIO2_CLK_ROOT.outFreq, value: 30 MHz}
+- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 160 MHz}
 - {id: FLEXSPI_CLK_ROOT.outFreq, value: 160 MHz}
 - {id: GPT1_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: GPT2_ipg_clk_highfreq.outFreq, value: 24 MHz}
@@ -515,6 +516,8 @@ outputs:
 settings:
 - {id: CCM.AHB_PODF.scale, value: '1', locked: true}
 - {id: CCM.ARM_PODF.scale, value: '2', locked: true}
+- {id: CCM.FLEXSPI2_PODF.scale, value: '3', locked: true}
+- {id: CCM.FLEXSPI2_SEL.sel, value: CCM.PLL3_SW_CLK_SEL}
 - {id: CCM.FLEXSPI_PODF.scale, value: '3', locked: true}
 - {id: CCM.FLEXSPI_SEL.sel, value: CCM.PLL3_SW_CLK_SEL}
 - {id: CCM.LPI2C_CLK_PODF.scale, value: '6', locked: true}
@@ -661,6 +664,12 @@ void BOARD_ClockOverdrive(void)
     /* Set Flexspi clock source. */
     CLOCK_SetMux(kCLOCK_FlexspiMux, 1);
 #endif
+    /* Disable Flexspi2 clock gate. */
+    CLOCK_DisableClock(kCLOCK_FlexSpi2);
+    /* Set FLEXSPI2_PODF. */
+    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 0);
+    /* Set Flexspi2 clock source. */
+    CLOCK_SetMux(kCLOCK_Flexspi2Mux, 1);
     /* Disable CSI clock gate. */
     CLOCK_DisableClock(kCLOCK_Csi);
     /* Set CSI_PODF. */
@@ -906,6 +915,7 @@ outputs:
 - {id: CLK_1M.outFreq, value: 1 MHz}
 - {id: CLK_24M.outFreq, value: 24 MHz}
 - {id: CSI_CLK_ROOT.outFreq, value: 12 MHz}
+- {id: ENET2_125M_CLK.outFreq, value: 1.2 MHz}
 - {id: ENET_125M_CLK.outFreq, value: 2.4 MHz}
 - {id: ENET_25M_REF_CLK.outFreq, value: 1.2 MHz}
 - {id: FLEXIO1_CLK_ROOT.outFreq, value: 1.5 MHz}
@@ -1202,6 +1212,11 @@ void BOARD_ClockLowPower(void)
     CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_DIV_SELECT(1);
     /* Enable Enet output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENABLE_MASK;
+    /* Set Enet2 output divider. */
+    CCM_ANALOG->PLL_ENET =
+        (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT(0);
+    /* Enable Enet2 output. */
+    CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET2_REF_EN_MASK;
     /* Enable Enet25M output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET_25M_REF_EN_MASK;
     /* DeInit Usb2 PLL. */
