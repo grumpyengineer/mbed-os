@@ -1,11 +1,10 @@
 /*
- * Copyright 2017 NXP
- * All rights reserved.
+ * Copyright 2017, 2019, 2024-2025 NXP
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef _FSL_KPP_H_
-#define _FSL_KPP_H_
+#ifndef FSL_KPP_H_
+#define FSL_KPP_H_
 
 #include "fsl_common.h"
 
@@ -19,13 +18,13 @@
  ******************************************************************************/
 
 /*! @name Driver version */
-/*@{*/
-/*! @brief KPP driver version 2.0.0. */
-#define FSL_KPP_DRIVER_VERSION (MAKE_VERSION(2, 0, 0))
-/*@}*/
+/*! @{ */
+/*! @brief KPP driver version. */
+#define FSL_KPP_DRIVER_VERSION (MAKE_VERSION(2, 1, 1))
+/*! @} */
 
 #define KPP_KEYPAD_COLUMNNUM_MAX (8U)
-#define KPP_KEYPAD_ROWNUM_MAX (8U)
+#define KPP_KEYPAD_ROWNUM_MAX    (8U)
 
 /*! @brief List of interrupts supported by the peripheral. This
  * enumeration uses one-bot encoding to allow a logical OR of multiple
@@ -85,7 +84,7 @@ void KPP_Init(KPP_Type *base, kpp_config_t *configure);
  */
 void KPP_Deinit(KPP_Type *base);
 
-/* @} */
+/*! @} */
 
 /*!
  * @name KPP Basic Operation
@@ -101,7 +100,7 @@ void KPP_Deinit(KPP_Type *base);
  */
 static inline void KPP_EnableInterrupts(KPP_Type *base, uint16_t mask)
 {
-    uint16_t data = base->KPSR & ~(KPP_KPSR_KPKR_MASK | KPP_KPSR_KPKD_MASK);
+    uint16_t data = (uint16_t)(base->KPSR & ~(KPP_KPSR_KPKR_MASK | KPP_KPSR_KPKD_MASK));
     base->KPSR    = data | mask;
 }
 
@@ -165,10 +164,12 @@ static inline void KPP_SetSynchronizeChain(KPP_Type *base, uint16_t mask)
  * length at least equal to KPP_KEYPAD_COLUMNNUM_MAX * KPP_KEYPAD_ROWNUM_MAX.
  * the data pointer is recommended to be a array like uint8_t data[KPP_KEYPAD_COLUMNNUM_MAX].
  * for example the data[2] = 4, that means in column 1 row 2 has a key press event.
+ * @param clockSrc_Hz Source clock.
+ * @retval kStatus_Success kpp press scan succeed.
  */
-void KPP_keyPressScanning(KPP_Type *base, uint8_t *data, uint32_t clockSrc_Hz);
+status_t KPP_keyPressScanning(KPP_Type *base, uint8_t *data, uint32_t clockSrc_Hz);
 
-/* @} */
+/*! @} */
 
 #if defined(__cplusplus)
 }
@@ -176,4 +177,4 @@ void KPP_keyPressScanning(KPP_Type *base, uint8_t *data, uint32_t clockSrc_Hz);
 
 /*! @}*/
 
-#endif /* _FSL_KPP_H_*/
+#endif /* FSL_KPP_H_*/

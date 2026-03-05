@@ -1,9 +1,15 @@
 /*
 ** ###################################################################
 **     Processors:          MIMXRT1062CVJ5A
+**                          MIMXRT1062CVJ5B
 **                          MIMXRT1062CVL5A
+**                          MIMXRT1062CVL5B
 **                          MIMXRT1062DVJ6A
+**                          MIMXRT1062DVJ6B
 **                          MIMXRT1062DVL6A
+**                          MIMXRT1062DVL6B
+**                          MIMXRT1062DVN6B
+**                          MIMXRT1062XVN5B
 **
 **     Compilers:           Freescale C/C++ for Embedded ARM
 **                          GNU C Compiler
@@ -11,9 +17,9 @@
 **                          Keil ARM C/C++ Compiler
 **                          MCUXpresso Compiler
 **
-**     Reference manual:    IMXRT1060RM Rev.1, 12/2018
-**     Version:             rev. 1.1, 2018-11-27
-**     Build:               b190329
+**     Reference manual:    IMXRT1060RM Rev.3, 07/2021 | IMXRT106XSRM Rev.0
+**     Version:             rev. 3.0, 2025-11-13
+**     Build:               b251113
 **
 **     Abstract:
 **         Provides a system configuration function and a global variable that
@@ -21,9 +27,7 @@
 **         the oscillator (PLL) that is part of the microcontroller device.
 **
 **     Copyright 2016 Freescale Semiconductor, Inc.
-**     Copyright 2016-2019 NXP
-**     All rights reserved.
-**
+**     Copyright 2016-2025 NXP
 **     SPDX-License-Identifier: BSD-3-Clause
 **
 **     http:                 www.nxp.com
@@ -36,14 +40,25 @@
 **         Update header files to align with IMXRT1060RM Rev.0.
 **     - rev. 1.1 (2018-11-27)
 **         Update header files to align with IMXRT1060RM Rev.1.
+**     - rev. 1.2 (2019-04-29)
+**         Add SET/CLR/TOG register group to register CTRL, STAT, CHANNELCTRL, CH0STAT, CH0OPTS, CH1STAT, CH1OPTS, CH2STAT, CH2OPTS, CH3STAT, CH3OPTS of DCP module.
+**     - rev. 1.3 (2021-08-10)
+**         Update header files to align with IMXRT1060RM Rev.3.
+**     - rev. 1.4 (2022-03-25)
+**         Add RT1060X device
+**     - rev. 2.0 (2024-10-29)
+**         Change the device header file from single flat file to multiple files based on peripherals,
+**         each peripheral with dedicated header file located in periphN folder.
+**     - rev. 3.0 (2025-11-13)
+**         Move enet compatibility macros to common header.
 **
 ** ###################################################################
 */
 
 /*!
  * @file MIMXRT1062
- * @version 1.1
- * @date 2018-11-27
+ * @version 3.0
+ * @date 2025-11-13
  * @brief Device specific configuration file for MIMXRT1062 (implementation file)
  *
  * Provides a system configuration function and a global variable that contains
@@ -77,27 +92,35 @@ void SystemInit (void) {
 #endif
 
 /* Disable Watchdog Power Down Counter */
-WDOG1->WMCR &= ~WDOG_WMCR_PDE_MASK;
-WDOG2->WMCR &= ~WDOG_WMCR_PDE_MASK;
+    WDOG1->WMCR &= ~(uint16_t) WDOG_WMCR_PDE_MASK;
+    WDOG2->WMCR &= ~(uint16_t) WDOG_WMCR_PDE_MASK;
 
 /* Watchdog disable */
 
 #if (DISABLE_WDOG)
-    if (WDOG1->WCR & WDOG_WCR_WDE_MASK)
+    if ((WDOG1->WCR & WDOG_WCR_WDE_MASK) != 0U)
     {
-        WDOG1->WCR &= ~WDOG_WCR_WDE_MASK;
+        WDOG1->WCR &= ~(uint16_t) WDOG_WCR_WDE_MASK;
     }
-    if (WDOG2->WCR & WDOG_WCR_WDE_MASK)
+    if ((WDOG2->WCR & WDOG_WCR_WDE_MASK) != 0U)
     {
-        WDOG2->WCR &= ~WDOG_WCR_WDE_MASK;
+        WDOG2->WCR &= ~(uint16_t) WDOG_WCR_WDE_MASK;
     }
-    RTWDOG->CNT = 0xD928C520U; /* 0xD928C520U is the update key */
+    if ((RTWDOG->CS & RTWDOG_CS_CMD32EN_MASK) != 0U)
+    {
+        RTWDOG->CNT = 0xD928C520U; /* 0xD928C520U is the update key */
+    }
+    else
+    {
+        RTWDOG->CNT = 0xC520U;
+        RTWDOG->CNT = 0xD928U;
+    }
     RTWDOG->TOVAL = 0xFFFF;
     RTWDOG->CS = (uint32_t) ((RTWDOG->CS) & ~RTWDOG_CS_EN_MASK) | RTWDOG_CS_UPDATE_MASK;
 #endif /* (DISABLE_WDOG) */
 
     /* Disable Systick which might be enabled by bootrom */
-    if (SysTick->CTRL & SysTick_CTRL_ENABLE_Msk)
+    if ((SysTick->CTRL & SysTick_CTRL_ENABLE_Msk) != 0U)
     {
         SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
     }
@@ -106,11 +129,6 @@ WDOG2->WMCR &= ~WDOG_WMCR_PDE_MASK;
 #if defined(__ICACHE_PRESENT) && __ICACHE_PRESENT
     if (SCB_CCR_IC_Msk != (SCB_CCR_IC_Msk & SCB->CCR)) {
         SCB_EnableICache();
-    }
-#endif
-#if defined(__DCACHE_PRESENT) && __DCACHE_PRESENT
-    if (SCB_CCR_DC_Msk != (SCB_CCR_DC_Msk & SCB->CCR)) {
-        SCB_EnableDCache();
     }
 #endif
 
@@ -128,20 +146,20 @@ void SystemCoreClockUpdate (void) {
     uint32_t PLL2MainClock;
 
     /* Periph_clk2_clk ---> Periph_clk */
-    if (CCM->CBCDR & CCM_CBCDR_PERIPH_CLK_SEL_MASK)
+    if ((CCM->CBCDR & CCM_CBCDR_PERIPH_CLK_SEL_MASK) != 0U)
     {
         switch (CCM->CBCMR & CCM_CBCMR_PERIPH_CLK2_SEL_MASK)
         {
             /* Pll3_sw_clk ---> Periph_clk2_clk ---> Periph_clk */
             case CCM_CBCMR_PERIPH_CLK2_SEL(0U):
-                if(CCM_ANALOG->PLL_USB1 & CCM_ANALOG_PLL_USB1_BYPASS_MASK)
+                if((CCM_ANALOG->PLL_USB1 & CCM_ANALOG_PLL_USB1_BYPASS_MASK) != 0U)
                 {
                     freq = (((CCM_ANALOG->PLL_USB1 & CCM_ANALOG_PLL_USB1_BYPASS_CLK_SRC_MASK) >> CCM_ANALOG_PLL_USB1_BYPASS_CLK_SRC_SHIFT) == 0U) ?
                            CPU_XTAL_CLK_HZ : CPU_CLK1_HZ;
                 }
                 else
                 {
-                    freq = (CPU_XTAL_CLK_HZ * ((CCM_ANALOG->PLL_USB1 & CCM_ANALOG_PLL_USB1_DIV_SELECT_MASK) ? 22U : 20U));
+                    freq = (CPU_XTAL_CLK_HZ * (((CCM_ANALOG->PLL_USB1 & CCM_ANALOG_PLL_USB1_DIV_SELECT_MASK) != 0U) ? 22U : 20U));
                 }
                 break;
 
@@ -167,7 +185,7 @@ void SystemCoreClockUpdate (void) {
     else
     {
         /* check if pll is bypassed */
-        if(CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_BYPASS_MASK)
+        if((CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_BYPASS_MASK) != 0U)
         {
             PLL1MainClock = (((CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_BYPASS_CLK_SRC_MASK) >> CCM_ANALOG_PLL_ARM_BYPASS_CLK_SRC_SHIFT) == 0U) ?
                    CPU_XTAL_CLK_HZ : CPU_CLK1_HZ;
@@ -179,17 +197,16 @@ void SystemCoreClockUpdate (void) {
         }
 
         /* check if pll is bypassed */
-        if(CCM_ANALOG->PLL_SYS & CCM_ANALOG_PLL_SYS_BYPASS_MASK)
+        if((CCM_ANALOG->PLL_SYS & CCM_ANALOG_PLL_SYS_BYPASS_MASK) != 0U)
         {
             PLL2MainClock = (((CCM_ANALOG->PLL_SYS & CCM_ANALOG_PLL_SYS_BYPASS_CLK_SRC_MASK) >> CCM_ANALOG_PLL_SYS_BYPASS_CLK_SRC_SHIFT) == 0U) ?
                    CPU_XTAL_CLK_HZ : CPU_CLK1_HZ;
         }
         else
         {
-            PLL2MainClock = (CPU_XTAL_CLK_HZ * ((CCM_ANALOG->PLL_SYS & CCM_ANALOG_PLL_SYS_DIV_SELECT_MASK) ? 22U : 20U));
+            PLL2MainClock = (CPU_XTAL_CLK_HZ * (((CCM_ANALOG->PLL_SYS & CCM_ANALOG_PLL_SYS_DIV_SELECT_MASK) != 0U) ? 22U : 20U));
         }
-        PLL2MainClock += ((uint64_t)CPU_XTAL_CLK_HZ * ((uint64_t)(CCM_ANALOG->PLL_SYS_NUM))) / ((uint64_t)(CCM_ANALOG->PLL_SYS_DENOM));
-
+        PLL2MainClock += (uint32_t)(((uint64_t)CPU_XTAL_CLK_HZ * ((uint64_t)(CCM_ANALOG->PLL_SYS_NUM))) / ((uint64_t)(CCM_ANALOG->PLL_SYS_DENOM)));
 
         switch (CCM->CBCMR & CCM_CBCMR_PRE_PERIPH_CLK_SEL_MASK)
         {

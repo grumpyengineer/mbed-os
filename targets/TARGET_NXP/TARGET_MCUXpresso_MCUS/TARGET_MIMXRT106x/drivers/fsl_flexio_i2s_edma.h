@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2018 NXP
+ * Copyright 2016-2019,2025 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef _FSL_FLEXIO_I2S_EDMA_H_
-#define _FSL_FLEXIO_I2S_EDMA_H_
+#ifndef FSL_FLEXIO_I2S_EDMA_H_
+#define FSL_FLEXIO_I2S_EDMA_H_
 
 #include "fsl_flexio_i2s.h"
 #include "fsl_edma.h"
@@ -21,10 +21,10 @@
  ******************************************************************************/
 
 /*! @name Driver version */
-/*@{*/
-/*! @brief FlexIO I2S EDMA driver version 2.1.5. */
-#define FSL_FLEXIO_I2S_EDMA_DRIVER_VERSION (MAKE_VERSION(2, 1, 5))
-/*@}*/
+/*! @{ */
+/*! @brief FlexIO I2S EDMA driver version 2.1.9. */
+#define FSL_FLEXIO_I2S_EDMA_DRIVER_VERSION (MAKE_VERSION(2, 1, 9))
+/*! @} */
 
 typedef struct _flexio_i2s_edma_handle flexio_i2s_edma_handle_t;
 
@@ -110,8 +110,6 @@ void FLEXIO_I2S_TransferRxCreateHandleEDMA(FLEXIO_I2S_Type *base,
  * @param handle FlexIO I2S eDMA handle pointer
  * @param format Pointer to FlexIO I2S audio data format structure.
  * @param srcClock_Hz FlexIO I2S clock source frequency in Hz, it should be 0 while in slave mode.
- * @retval kStatus_Success Audio format set successfully.
- * @retval kStatus_InvalidArgument The input arguments is invalid.
  */
 void FLEXIO_I2S_TransferSetFormatEDMA(FLEXIO_I2S_Type *base,
                                       flexio_i2s_edma_handle_t *handle,

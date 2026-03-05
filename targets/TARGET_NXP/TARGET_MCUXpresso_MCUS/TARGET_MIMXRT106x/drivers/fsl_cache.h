@@ -1,17 +1,16 @@
 /*
- * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2021 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef _FSL_CACHE_H_
-#define _FSL_CACHE_H_
+#ifndef FSL_CACHE_H_
+#define FSL_CACHE_H_
 
 #include "fsl_common.h"
 
 /*!
- * @addtogroup cache
+ * @addtogroup cache_armv7_m7
  * @{
  */
 
@@ -20,10 +19,10 @@
  ******************************************************************************/
 
 /*! @name Driver version */
-/*@{*/
-/*! @brief cache driver version 2.0.1. */
-#define FSL_CACHE_DRIVER_VERSION (MAKE_VERSION(2, 0, 1))
-/*@}*/
+/*! @{ */
+/*! @brief cache driver version 2.0.4. */
+#define FSL_CACHE_DRIVER_VERSION (MAKE_VERSION(2, 0, 5))
+/*! @} */
 
 #if defined(FSL_FEATURE_SOC_L2CACHEC_COUNT) && FSL_FEATURE_SOC_L2CACHEC_COUNT
 #ifndef FSL_SDK_DISBLE_L2CACHE_PRESENT
@@ -140,7 +139,10 @@ static inline void L1CACHE_EnableICache(void)
  */
 static inline void L1CACHE_DisableICache(void)
 {
-    SCB_DisableICache();
+    if (SCB_CCR_IC_Msk == (SCB_CCR_IC_Msk & SCB->CCR))
+    {
+        SCB_DisableICache();
+    }
 }
 
 /*!
@@ -179,7 +181,10 @@ static inline void L1CACHE_EnableDCache(void)
  */
 static inline void L1CACHE_DisableDCache(void)
 {
-    SCB_DisableDCache();
+    if (SCB_CCR_DC_Msk == (SCB_CCR_DC_Msk & SCB->CCR))
+    {
+        SCB_DisableDCache();
+    }
 }
 
 /*!
@@ -221,10 +226,12 @@ static inline void L1CACHE_CleanInvalidateDCache(void)
  */
 static inline void L1CACHE_InvalidateDCacheByRange(uint32_t address, uint32_t size_byte)
 {
-    uint32_t startAddr = address & (uint32_t) ~(FSL_FEATURE_L1DCACHE_LINESIZE_BYTE - 1);
-    uint32_t size      = size_byte + address - startAddr;
-
-    SCB_InvalidateDCache_by_Addr((uint32_t *)startAddr, size);
+    if (size_byte == 0U)
+    {
+        return;
+    }
+    int32_t len = (size_byte > (uint32_t)INT32_MAX) ? (int32_t)INT32_MAX : (int32_t)size_byte;
+    SCB_InvalidateDCache_by_Addr((uint32_t *)address, len);
 }
 
 /*!
@@ -239,10 +246,12 @@ static inline void L1CACHE_InvalidateDCacheByRange(uint32_t address, uint32_t si
  */
 static inline void L1CACHE_CleanDCacheByRange(uint32_t address, uint32_t size_byte)
 {
-    uint32_t startAddr = address & (uint32_t) ~(FSL_FEATURE_L1DCACHE_LINESIZE_BYTE - 1);
-    uint32_t size      = size_byte + address - startAddr;
-
-    SCB_CleanDCache_by_Addr((uint32_t *)startAddr, size);
+    if (size_byte == 0U)
+    {
+        return;
+    }
+    int32_t len = (size_byte > (uint32_t)INT32_MAX) ? (int32_t)INT32_MAX : (int32_t)size_byte;
+    SCB_CleanDCache_by_Addr((uint32_t *)address, len);
 }
 
 /*!
@@ -257,12 +266,14 @@ static inline void L1CACHE_CleanDCacheByRange(uint32_t address, uint32_t size_by
  */
 static inline void L1CACHE_CleanInvalidateDCacheByRange(uint32_t address, uint32_t size_byte)
 {
-    uint32_t startAddr = address & (uint32_t) ~(FSL_FEATURE_L1DCACHE_LINESIZE_BYTE - 1);
-    uint32_t size      = size_byte + address - startAddr;
-
-    SCB_CleanInvalidateDCache_by_Addr((uint32_t *)startAddr, size);
+    if (size_byte == 0U)
+    {
+        return;
+    }
+    int32_t len = (size_byte > (uint32_t)INT32_MAX) ? (int32_t)INT32_MAX : (int32_t)size_byte;
+    SCB_CleanInvalidateDCache_by_Addr((uint32_t *)address, len);
 }
-/*@}*/
+/*! @} */
 
 #if defined(FSL_FEATURE_SOC_L2CACHEC_COUNT) && FSL_FEATURE_SOC_L2CACHEC_COUNT
 /*!
@@ -391,7 +402,7 @@ void L2CACHE_CleanInvalidateByRange(uint32_t address, uint32_t size_byte);
  */
 void L2CACHE_LockdownByWayEnable(uint32_t masterId, uint32_t mask, bool enable);
 
-/*@}*/
+/*! @} */
 #endif /* FSL_FEATURE_SOC_L2CACHEC_COUNT */
 
 /*!
@@ -456,7 +467,7 @@ void DCACHE_CleanByRange(uint32_t address, uint32_t size_byte);
  */
 void DCACHE_CleanInvalidateByRange(uint32_t address, uint32_t size_byte);
 
-/*@}*/
+/*! @} */
 
 #if defined(__cplusplus)
 }
@@ -464,4 +475,4 @@ void DCACHE_CleanInvalidateByRange(uint32_t address, uint32_t size_byte);
 
 /*! @}*/
 
-#endif /* _FSL_CACHE_H_*/
+#endif /* FSL_CACHE_H_*/

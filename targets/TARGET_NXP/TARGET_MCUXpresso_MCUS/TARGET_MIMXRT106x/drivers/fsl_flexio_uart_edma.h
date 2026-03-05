@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2020 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef _FSL_FLEXIO_UART_EDMA_H_
-#define _FSL_FLEXIO_UART_EDMA_H_
+#ifndef FSL_FLEXIO_UART_EDMA_H_
+#define FSL_FLEXIO_UART_EDMA_H_
 
 #include "fsl_flexio_uart.h"
 #include "fsl_edma.h"
@@ -21,10 +21,10 @@
  ******************************************************************************/
 
 /*! @name Driver version */
-/*@{*/
-/*! @brief FlexIO UART EDMA driver version 2.1.4. */
-#define FSL_FLEXIO_UART_EDMA_DRIVER_VERSION (MAKE_VERSION(2, 1, 4))
-/*@}*/
+/*! @{ */
+/*! @brief FlexIO UART EDMA driver version. */
+#define FSL_FLEXIO_UART_EDMA_DRIVER_VERSION (MAKE_VERSION(2, 4, 1))
+/*! @} */
 
 /* Forward declaration of the handle typedef. */
 typedef struct _flexio_uart_edma_handle flexio_uart_edma_handle_t;
@@ -167,7 +167,7 @@ status_t FLEXIO_UART_TransferGetReceiveCountEDMA(FLEXIO_UART_Type *base,
                                                  flexio_uart_edma_handle_t *handle,
                                                  size_t *count);
 
-/*@}*/
+/*! @} */
 
 #if defined(__cplusplus)
 }
@@ -175,4 +175,4 @@ status_t FLEXIO_UART_TransferGetReceiveCountEDMA(FLEXIO_UART_Type *base,
 
 /*! @}*/
 
-#endif /* _FSL_UART_EDMA_H_ */
+#endif /* FSL_UART_EDMA_H_ */

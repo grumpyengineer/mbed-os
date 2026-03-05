@@ -1,13 +1,12 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
- * All rights reserved.
+ * Copyright 2016-2021, 2024-2025 NXP
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _FSL_ADC_ETC_H_
-#define _FSL_ADC_ETC_H_
+#ifndef FSL_ADC_ETC_H_
+#define FSL_ADC_ETC_H_
 
 #include "fsl_common.h"
 
@@ -20,7 +19,7 @@
  * Definitions
  ******************************************************************************/
 /*! @brief ADC_ETC driver version */
-#define FSL_ADC_ETC_DRIVER_VERSION (MAKE_VERSION(2, 0, 1)) /*!< Version 2.0.1. */
+#define FSL_ADC_ETC_DRIVER_VERSION (MAKE_VERSION(2, 3, 2)) /*!< Version 2.3.2. */
 /*! @brief The mask of status flags cleared by writing 1. */
 #define ADC_ETC_DMA_CTRL_TRGn_REQ_MASK 0xFF0000U
 
@@ -29,10 +28,15 @@
  */
 enum _adc_etc_status_flag_mask
 {
-    kADC_ETC_Done0StatusFlagMask = 1U,
-    kADC_ETC_Done1StatusFlagMask = 2U,
-    kADC_ETC_Done2StatusFlagMask = 4U,
-    kADC_ETC_ErrorStatusFlagMask = 8U,
+    kADC_ETC_Done0StatusFlagMask = 1U << 0U,
+    kADC_ETC_Done1StatusFlagMask = 1U << 1U,
+    kADC_ETC_Done2StatusFlagMask = 1U << 2U,
+#if defined(FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN) && FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN
+    kADC_ETC_Done3StatusFlagMask = 1U << 3U,
+    kADC_ETC_ErrorStatusFlagMask = 1U << 4U,
+#else
+    kADC_ETC_ErrorStatusFlagMask  = 1U << 3U,
+#endif /* FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN */
 };
 
 /*!
@@ -59,10 +63,17 @@ typedef enum _adc_etc_external_trigger_source
  */
 typedef enum _adc_etc_interrupt_enable
 {
+#if defined(FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN) && FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN
+    kADC_ETC_Done0InterruptEnable = 0U, /* Enable the DONE0 interrupt when ADC conversions complete. */
+    kADC_ETC_Done1InterruptEnable = 1U, /* Enable the DONE1 interrupt when ADC conversions complete. */
+    kADC_ETC_Done2InterruptEnable = 2U, /* Enable the DONE2 interrupt when ADC conversions complete. */
+    kADC_ETC_Done3InterruptEnable = 3U, /* Enable the DONE3 interrupt when ADC conversions complete. */
+#else
     kADC_ETC_InterruptDisable     = 0U, /* Disable the ADC_ETC interrupt. */
     kADC_ETC_Done0InterruptEnable = 1U, /* Enable the DONE0 interrupt when ADC conversions complete. */
     kADC_ETC_Done1InterruptEnable = 2U, /* Enable the DONE1 interrupt when ADC conversions complete. */
     kADC_ETC_Done2InterruptEnable = 3U, /* Enable the DONE2 interrupt when ADC conversions complete. */
+#endif /* FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN */
 } adc_etc_interrupt_enable_t;
 
 #if defined(FSL_FEATURE_ADC_ETC_HAS_CTRL_DMA_MODE_SEL) && FSL_FEATURE_ADC_ETC_HAS_CTRL_DMA_MODE_SEL
@@ -82,21 +93,37 @@ typedef enum _adc_etc_dma_mode_selection
  */
 typedef struct _adc_etc_config
 {
-    bool enableTSCBypass;   /* If bypass TSC, TSC would trigger ADC directly.
-                               Otherwise TSC would trigger ADC through ADC_ETC. */
+#if ((!(defined(FSL_FEATURE_ADC_ETC_HAS_NO_TSC0_TRIG) && FSL_FEATURE_ADC_ETC_HAS_NO_TSC0_TRIG)) || \
+     (!(defined(FSL_FEATURE_ADC_ETC_HAS_NO_TSC1_TRIG) && FSL_FEATURE_ADC_ETC_HAS_NO_TSC1_TRIG)))
+    bool enableTSCBypass; /* If bypass TSC, TSC would trigger ADC directly.
+                             Otherwise TSC would trigger ADC through ADC_ETC. */
+#endif
+
+#if !(defined(FSL_FEATURE_ADC_ETC_HAS_NO_TSC0_TRIG) && FSL_FEATURE_ADC_ETC_HAS_NO_TSC0_TRIG)
     bool enableTSC0Trigger; /* Enable external TSC0 trigger. It is valid when enableTSCBypass = false. */
+#endif                      /* FSL_FEATURE_ADC_ETC_HAS_NO_TSC0_TRIG */
+
+#if !(defined(FSL_FEATURE_ADC_ETC_HAS_NO_TSC1_TRIG) && FSL_FEATURE_ADC_ETC_HAS_NO_TSC1_TRIG)
     bool enableTSC1Trigger; /* Enable external TSC1 trigger. It is valid when enableTSCBypass = false.*/
+#endif                      /* FSL_FEATURE_ADC_ETC_HAS_NO_TSC1_TRIG */
+
 #if defined(FSL_FEATURE_ADC_ETC_HAS_CTRL_DMA_MODE_SEL) && FSL_FEATURE_ADC_ETC_HAS_CTRL_DMA_MODE_SEL
     adc_etc_dma_mode_selection_t dmaMode; /* Select the ADC_ETC DMA mode. */
 #endif                                    /*FSL_FEATURE_ADC_ETC_HAS_CTRL_DMA_MODE_SEL*/
-    uint32_t TSC0triggerPriority;         /* External TSC0 trigger priority, 7 is highest, 0 is lowest. */
-    uint32_t TSC1triggerPriority;         /* External TSC1 trigger priority, 7 is highest, 0 is lowest. */
-    uint32_t clockPreDivider;             /* Pre-divider for trig delay and interval. Available range is 0-255.
-                                            Clock would be divided by (clockPreDivider+1). */
-    uint32_t XBARtriggerMask; /* Enable the corresponding trigger source. Available range is trigger0:0x01 to
-                                 trigger7:0x80
-                                 For example, XBARtriggerMask = 0x7U, which means trigger0, trigger1 and trigger2 is
-                                 enabled. */
+
+#if !(defined(FSL_FEATURE_ADC_ETC_HAS_NO_TSC0_TRIG) && FSL_FEATURE_ADC_ETC_HAS_NO_TSC0_TRIG)
+    uint32_t TSC0triggerPriority; /* External TSC0 trigger priority, 7 is highest, 0 is lowest. */
+#endif                            /* FSL_FEATURE_ADC_ETC_HAS_NO_TSC0_TRIG */
+
+#if !(defined(FSL_FEATURE_ADC_ETC_HAS_NO_TSC1_TRIG) && FSL_FEATURE_ADC_ETC_HAS_NO_TSC1_TRIG)
+    uint32_t TSC1triggerPriority; /* External TSC1 trigger priority, 7 is highest, 0 is lowest. */
+#endif                            /* FSL_FEATURE_ADC_ETC_HAS_NO_TSC1_TRIG */
+    uint32_t clockPreDivider;     /* Pre-divider for trig delay and interval. Available range is 0-255.
+                                    Clock would be divided by (clockPreDivider+1). */
+    uint32_t XBARtriggerMask;     /* Enable the corresponding trigger source. Available range is trigger0:0x01 to
+                                     trigger7:0x80
+                                     For example, XBARtriggerMask = 0x7U, which means trigger0, trigger1 and trigger2 is
+                                     enabled. */
 } adc_etc_config_t;
 
 /*!
@@ -109,6 +136,9 @@ typedef struct _adc_etc_trigger_chain_config
     uint32_t ADCHCRegisterSelect; /* Select relevant ADC_HCx register to trigger. 1U : HC0, 2U: HC1, 4U: HC2 ... */
     uint32_t ADCChannelSelect;    /* Select ADC sample channel. */
     adc_etc_interrupt_enable_t InterruptEnable; /* Enable/disable Interrupt. */
+#if defined(FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN) && FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN
+    bool enableIrq; /* Enable IRQ for selected interrupt enable choice in "InterruptEnable" */
+#endif              /* FSL_FEATURE_ADC_ETC_HAS_TRIGm_CHAIN_a_b_IEn_EN */
 } adc_etc_trigger_chain_config_t;
 
 /*!
@@ -163,7 +193,7 @@ void ADC_ETC_Deinit(ADC_ETC_Type *base);
  *   config->TSC1triggerPriority = 0U;
  *   config->clockPreDivider = 0U;
  *   config->XBARtriggerMask = 0U;
- * @endCode
+ * @endcode
  *
  * @param config Pointer to "adc_etc_config_t" structure.
  */
@@ -223,8 +253,8 @@ void ADC_ETC_ClearInterruptStatusFlags(ADC_ETC_Type *base,
 static inline void ADC_ETC_EnableDMA(ADC_ETC_Type *base, uint32_t triggerGroup)
 {
     /* Avoid clearing status flags at the same time. */
-    base->DMA_CTRL =
-        (base->DMA_CTRL | (ADC_ETC_DMA_CTRL_TRIG0_ENABLE_MASK << triggerGroup)) & ~ADC_ETC_DMA_CTRL_TRGn_REQ_MASK;
+    base->DMA_CTRL = (base->DMA_CTRL | ((uint32_t)ADC_ETC_DMA_CTRL_TRIG0_ENABLE_MASK << (uint32_t)triggerGroup)) &
+                     ~ADC_ETC_DMA_CTRL_TRGn_REQ_MASK;
 }
 
 /*!
@@ -236,8 +266,8 @@ static inline void ADC_ETC_EnableDMA(ADC_ETC_Type *base, uint32_t triggerGroup)
 static inline void ADC_ETC_DisableDMA(ADC_ETC_Type *base, uint32_t triggerGroup)
 {
     /* Avoid clearing status flags at the same time. */
-    base->DMA_CTRL =
-        (base->DMA_CTRL & ~(ADC_ETC_DMA_CTRL_TRIG0_ENABLE_MASK << triggerGroup)) & ~ADC_ETC_DMA_CTRL_TRGn_REQ_MASK;
+    base->DMA_CTRL = (base->DMA_CTRL & ~((uint32_t)ADC_ETC_DMA_CTRL_TRIG0_ENABLE_MASK << (uint32_t)triggerGroup)) &
+                     ~ADC_ETC_DMA_CTRL_TRGn_REQ_MASK;
 }
 
 /*!
@@ -265,7 +295,7 @@ static inline void ADC_ETC_ClearDMAStatusFlags(ADC_ETC_Type *base, uint32_t mask
 }
 
 /*!
- * @brief When enable ,all logical will be reset.
+ * @brief When enable, all logical will be reset.
  *
  * @param base ADC_ETC peripheral base address.
  * @param enable Enable/Disable the software reset.
@@ -299,6 +329,30 @@ static inline void ADC_ETC_DoSoftwareTrigger(ADC_ETC_Type *base, uint32_t trigge
 }
 
 /*!
+ * @brief Do software trigger corresponding to each XBAR trigger sources.
+ *
+ * @note This function provides a workaround implementation for ERR052412
+ *  by using blocking way to implement SW trigger.
+ *
+ * @param base ADC_ETC peripheral base address.
+ * @param triggerGroup Trigger group index. Available number is 0~7.
+ */
+static inline void ADC_ETC_DoSoftwareTriggerBlocking(ADC_ETC_Type *base, uint32_t triggerGroup) 
+{
+    assert(triggerGroup < ADC_ETC_TRIGn_CTRL_COUNT);
+
+     /* ERR052412 ADC_ETC: TRIGx_CTRL[SW_TRIG] is previously high and software writes another
+      * 1 to TRIGx_CTRL[SW_TRIG], which possibly get The ADC_ETC TRIGx_CTRL[SW_TRIG] register
+      * bit to be stuck high.
+      */
+    while ((base->TRIG[triggerGroup].TRIGn_CTRL & ADC_ETC_TRIGn_CTRL_SW_TRIG_MASK) != 0U) 
+    {
+    }
+
+    base->TRIG[triggerGroup].TRIGn_CTRL |= ADC_ETC_TRIGn_CTRL_SW_TRIG_MASK;
+}
+
+/*!
  * @brief Get ADC conversion result from external XBAR sources.
  * For example, if triggerGroup is set to 0U and chainGroup is set to 1U, which means the API would
  * return Trigger0 source's chain1 conversion result.
@@ -310,8 +364,12 @@ static inline void ADC_ETC_DoSoftwareTrigger(ADC_ETC_Type *base, uint32_t trigge
  */
 uint32_t ADC_ETC_GetADCConversionValue(ADC_ETC_Type *base, uint32_t triggerGroup, uint32_t chainGroup);
 
+/*! @} */
+
 #if defined(__cplusplus)
 }
 #endif
 
-#endif /* _FSL_ADC_ETC_H_ */
+/*! @} */
+
+#endif /* FSL_ADC_ETC_H_ */

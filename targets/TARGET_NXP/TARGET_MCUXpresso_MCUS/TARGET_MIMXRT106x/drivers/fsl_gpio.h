@@ -1,13 +1,13 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2019 NXP
+ * Copyright 2016-2020 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _FSL_GPIO_H_
-#define _FSL_GPIO_H_
+#ifndef FSL_GPIO_H_
+#define FSL_GPIO_H_
 
 #include "fsl_common.h"
 
@@ -21,10 +21,10 @@
  ******************************************************************************/
 
 /*! @name Driver version */
-/*@{*/
-/*! @brief GPIO driver version 2.0.2. */
-#define FSL_GPIO_DRIVER_VERSION (MAKE_VERSION(2, 0, 2))
-/*@}*/
+/*! @{ */
+/*! @brief GPIO driver version. */
+#define FSL_GPIO_DRIVER_VERSION (MAKE_VERSION(2, 0, 7))
+/*! @} */
 
 /*! @brief GPIO direction definition. */
 typedef enum _gpio_pin_direction
@@ -72,11 +72,11 @@ extern "C" {
  *
  * @param base GPIO base pointer.
  * @param pin Specifies the pin number
- * @param initConfig pointer to a @ref gpio_pin_config_t structure that
+ * @param Config pointer to a @ref gpio_pin_config_t structure that
  *        contains the configuration information.
  */
 void GPIO_PinInit(GPIO_Type *base, uint32_t pin, const gpio_pin_config_t *Config);
-/*@}*/
+/*! @} */
 
 /*!
  * @name GPIO Reads and Write Functions
@@ -161,6 +161,8 @@ static inline void GPIO_PortToggle(GPIO_Type *base, uint32_t mask)
 {
 #if (defined(FSL_FEATURE_IGPIO_HAS_DR_TOGGLE) && (FSL_FEATURE_IGPIO_HAS_DR_TOGGLE == 1))
     base->DR_TOGGLE = mask;
+#else
+    base->DR ^= mask;
 #endif /* FSL_FEATURE_IGPIO_HAS_DR_TOGGLE */
 }
 
@@ -173,7 +175,7 @@ static inline void GPIO_PortToggle(GPIO_Type *base, uint32_t mask)
  */
 static inline uint32_t GPIO_PinRead(GPIO_Type *base, uint32_t pin)
 {
-    assert(pin < 32);
+    assert(pin < 32U);
 
     return (((base->DR) >> pin) & 0x1U);
 }
@@ -186,7 +188,7 @@ static inline uint32_t GPIO_ReadPinInput(GPIO_Type *base, uint32_t pin)
 {
     return GPIO_PinRead(base, pin);
 }
-/*@}*/
+/*! @} */
 
 /*!
  * @name GPIO Reads Pad Status Functions
@@ -202,7 +204,7 @@ static inline uint32_t GPIO_ReadPinInput(GPIO_Type *base, uint32_t pin)
  */
 static inline uint8_t GPIO_PinReadPadStatus(GPIO_Type *base, uint32_t pin)
 {
-    assert(pin < 32);
+    assert(pin < 32U);
 
     return (uint8_t)(((base->PSR) >> pin) & 0x1U);
 }
@@ -216,7 +218,7 @@ static inline uint8_t GPIO_ReadPadStatus(GPIO_Type *base, uint32_t pin)
     return GPIO_PinReadPadStatus(base, pin);
 }
 
-/*@}*/
+/*! @} */
 
 /*!
  * @name Interrupts and flags management functions
@@ -228,7 +230,7 @@ static inline uint8_t GPIO_ReadPadStatus(GPIO_Type *base, uint32_t pin)
  *
  * @param base GPIO base pointer.
  * @param pin GPIO port pin number.
- * @param pininterruptMode pointer to a @ref gpio_interrupt_mode_t structure
+ * @param pinInterruptMode pointer to a @ref gpio_interrupt_mode_t structure
  *        that contains the interrupt mode information.
  */
 void GPIO_PinSetInterruptConfig(GPIO_Type *base, uint32_t pin, gpio_interrupt_mode_t pinInterruptMode);
@@ -329,7 +331,7 @@ static inline void GPIO_ClearPinsInterruptFlags(GPIO_Type *base, uint32_t mask)
 {
     GPIO_PortClearInterruptFlags(base, mask);
 }
-/*@}*/
+/*! @} */
 
 #if defined(__cplusplus)
 }
@@ -339,4 +341,4 @@ static inline void GPIO_ClearPinsInterruptFlags(GPIO_Type *base, uint32_t mask)
  * @}
  */
 
-#endif /* _FSL_GPIO_H_*/
+#endif /* FSL_GPIO_H_*/

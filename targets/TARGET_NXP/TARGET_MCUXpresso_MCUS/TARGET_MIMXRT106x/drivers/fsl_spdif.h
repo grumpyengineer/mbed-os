@@ -1,13 +1,14 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
+ * Copyright 2017-2020 NXP
  * All rights reserved.
  *
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _FSL_SPDIF_H_
-#define _FSL_SPDIF_H_
+#ifndef FSL_SPDIF_H_
+#define FSL_SPDIF_H_
 
 #include "fsl_common.h"
 
@@ -21,12 +22,12 @@
  ******************************************************************************/
 
 /*! @name Driver version */
-/*@{*/
-#define FSL_SPDIF_DRIVER_VERSION (MAKE_VERSION(2, 0, 2)) /*!< Version 2.0.2 */
-/*@}*/
+/*! @{ */
+#define FSL_SPDIF_DRIVER_VERSION (MAKE_VERSION(2, 0, 7)) /*!< Version 2.0.7 */
+/*! @} */
 
 /*! @brief SPDIF return status*/
-enum _spdif_status_t
+enum
 {
     kStatus_SPDIF_RxDPLLLocked     = MAKE_STATUS(kStatusGroup_SPDIF, 0), /*!< SPDIF Rx PLL locked. */
     kStatus_SPDIF_TxFIFOError      = MAKE_STATUS(kStatusGroup_SPDIF, 1), /*!< SPDIF Tx FIFO error. */
@@ -100,7 +101,7 @@ typedef enum _spdif_validity_config
 } spdif_validity_config_t;
 
 /*! @brief The SPDIF interrupt enable flag */
-enum _spdif_interrupt_enable_t
+enum
 {
     kSPDIF_RxDPLLLocked                   = SPDIF_SIE_LOCK_MASK,        /*!< SPDIF DPLL locked */
     kSPDIF_TxFIFOError                    = SPDIF_SIE_TXUNOV_MASK,      /*!< Tx FIFO underrun or overrun */
@@ -119,11 +120,18 @@ enum _spdif_interrupt_enable_t
     kSPDIF_RxFIFOResync                   = SPDIF_SIE_RXFIFORESYN_MASK, /*!< SPDIF Rx left and right FIFO resync */
     kSPDIF_LockLoss                       = SPDIF_SIE_LOCKLOSS_MASK,    /*!< SPDIF receiver loss of lock */
     kSPDIF_TxFIFOEmpty                    = SPDIF_SIE_TXEM_MASK,        /*!< SPDIF Tx FIFO empty */
-    kSPDIF_RxFIFOFull                     = SPDIF_SIE_RXFIFOFUL_MASK    /*!< SPDIF Rx FIFO full */
+    kSPDIF_RxFIFOFull                     = SPDIF_SIE_RXFIFOFUL_MASK,   /*!< SPDIF Rx FIFO full */
+    kSPDIF_AllInterrupt                   = kSPDIF_RxDPLLLocked | kSPDIF_TxFIFOError | kSPDIF_TxFIFOResync |
+                          kSPDIF_RxControlChannelChange | kSPDIF_ValidityFlagNoGood | kSPDIF_RxIllegalSymbol |
+                          kSPDIF_RxParityBitError | kSPDIF_UChannelReceiveRegisterFull |
+                          kSPDIF_UChannelReceiveRegisterOverrun | kSPDIF_QChannelReceiveRegisterFull |
+                          kSPDIF_QChannelReceiveRegisterOverrun | kSPDIF_UQChannelSync | kSPDIF_UQChannelFrameError |
+                          kSPDIF_RxFIFOError | kSPDIF_RxFIFOResync | kSPDIF_LockLoss | kSPDIF_TxFIFOEmpty |
+                          kSPDIF_RxFIFOFull, /*!< all interrupt */
 };
 
 /*! @brief The DMA request sources */
-enum _spdif_dma_enable_t
+enum
 {
     kSPDIF_RxDMAEnable = SPDIF_SCR_DMA_RX_EN_MASK, /*!< Rx FIFO full */
     kSPDIF_TxDMAEnable = SPDIF_SCR_DMA_TX_EN_MASK, /*!< Tx FIFO empty */
@@ -145,7 +153,7 @@ typedef struct _spdif_config
 } spdif_config_t;
 
 /*!@brief SPDIF transfer queue size, user can refine it according to use case. */
-#define SPDIF_XFER_QUEUE_SIZE (4)
+#define SPDIF_XFER_QUEUE_SIZE (4U)
 
 /*! @brief SPDIF transfer structure */
 typedef struct _spdif_transfer
@@ -229,6 +237,13 @@ void SPDIF_GetDefaultConfig(spdif_config_t *config);
 void SPDIF_Deinit(SPDIF_Type *base);
 
 /*!
+ * @brief Get the instance number for SPDIF.
+ *
+ * @param base SPDIF base pointer.
+ */
+uint32_t SPDIF_GetInstance(SPDIF_Type *base);
+
+/*!
  * @brief Resets the SPDIF Tx.
  *
  * This function makes Tx FIFO in reset mode.
@@ -310,7 +325,11 @@ static inline uint32_t SPDIF_GetStatusFlag(SPDIF_Type *base)
  */
 static inline void SPDIF_ClearStatusFlags(SPDIF_Type *base, uint32_t mask)
 {
+#if defined FSL_FEATURE_SPDIF_HAS_NO_SIC_REGISTER && FSL_FEATURE_SPDIF_HAS_NO_SIC_REGISTER
+    base->SIS = mask;
+#else
     base->SIC = mask;
+#endif
 }
 
 /*! @} */
@@ -541,8 +560,7 @@ static inline uint32_t SPDIF_ReadLeftData(SPDIF_Type *base)
 
 /*!
  * @brief Reads data from the SPDIF FIFO.
- *.
-
+ *
  * @param base SPDIF base pointer.
  * @return Data in SPDIF FIFO.
  */
@@ -564,8 +582,7 @@ static inline uint32_t SPDIF_ReadChannelStatusHigh(SPDIF_Type *base)
 
 /*!
  * @brief Reads data from the SPDIF FIFO.
- *.
-
+ *
  * @param base SPDIF base pointer.
  * @return Data in SPDIF FIFO.
  */
@@ -587,8 +604,7 @@ static inline uint32_t SPDIF_ReadQChannel(SPDIF_Type *base)
 
 /*!
  * @brief Reads data from the SPDIF FIFO.
- *.
-
+ *
  * @param base SPDIF base pointer.
  * @return Data in SPDIF FIFO.
  */
@@ -738,4 +754,4 @@ void SPDIF_TransferRxHandleIRQ(SPDIF_Type *base, spdif_handle_t *handle);
 
 /*! @} */
 
-#endif /* _FSL_SPDIF_H_ */
+#endif /* FSL_SPDIF_H_ */

@@ -17,6 +17,7 @@ target_include_directories(mbed-mimxrt106x
         .
         device
         drivers
+        periph
 )
 
 target_sources(mbed-mimxrt106x
@@ -54,20 +55,19 @@ target_sources(mbed-mimxrt106x
         drivers/fsl_enet.c
         drivers/fsl_ewm.c
         drivers/fsl_flexcan.c
+        drivers/fsl_flexcan_edma.c
         drivers/fsl_flexio.c
-        drivers/fsl_flexio_camera.c
-        drivers/fsl_flexio_camera_edma.c
         drivers/fsl_flexio_i2c_master.c
         drivers/fsl_flexio_i2s.c
         drivers/fsl_flexio_i2s_edma.c
-        drivers/fsl_flexio_mculcd.c
-        drivers/fsl_flexio_mculcd_edma.c
         drivers/fsl_flexio_spi.c
         drivers/fsl_flexio_spi_edma.c
         drivers/fsl_flexio_uart.c
         drivers/fsl_flexio_uart_edma.c
         drivers/fsl_flexram.c
+        drivers/fsl_flexram_allocate.c
         drivers/fsl_flexspi.c
+        drivers/fsl_flexspi_edma.c
         drivers/fsl_gpc.c
         drivers/fsl_gpio.c
         drivers/fsl_gpt.c
@@ -84,6 +84,7 @@ target_sources(mbed-mimxrt106x
         drivers/fsl_pwm.c
         drivers/fsl_pxp.c
         drivers/fsl_qtmr.c
+        drivers/fsl_romapi.c
         drivers/fsl_rtwdog.c
         drivers/fsl_sai.c
         drivers/fsl_sai_edma.c
@@ -92,7 +93,6 @@ target_sources(mbed-mimxrt106x
         drivers/fsl_snvs_lp.c
         drivers/fsl_spdif.c
         drivers/fsl_spdif_edma.c
-        drivers/fsl_src.c
         drivers/fsl_tempmon.c
         drivers/fsl_trng.c
         drivers/fsl_tsc.c

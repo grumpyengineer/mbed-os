@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2022, 2025 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef _FSL_LPI2C_EDMA_H_
-#define _FSL_LPI2C_EDMA_H_
+#ifndef FSL_LPI2C_EDMA_H_
+#define FSL_LPI2C_EDMA_H_
 
 #include "fsl_lpi2c.h"
 #include "fsl_edma.h"
@@ -15,11 +15,13 @@
  * Definitions
  ******************************************************************************/
 
-/*! @name Driver version */
-/*@{*/
-/*! @brief LPI2C EDMA driver version 2.1.5. */
-#define FSL_LPI2C_EDMA_DRIVER_VERSION (MAKE_VERSION(2, 1, 5))
-/*@}*/
+/*!
+ * @name Driver version
+ * @{
+ */
+/*! @brief LPI2C EDMA driver version. */
+#define FSL_LPI2C_EDMA_DRIVER_VERSION (MAKE_VERSION(2, 4, 6))
+/*! @} */
 
 /*!
  * @addtogroup lpi2c_master_edma_driver
@@ -27,6 +29,7 @@
  */
 
 /* Forward declaration of the transfer descriptor and handle typedefs. */
+/*! @brief LPI2C master EDMA handle of the transfer. */
 typedef struct _lpi2c_master_edma_handle lpi2c_master_edma_handle_t;
 
 /*!
@@ -37,7 +40,7 @@ typedef struct _lpi2c_master_edma_handle lpi2c_master_edma_handle_t;
  *
  * @param base The LPI2C peripheral base address.
  * @param handle Handle associated with the completed transfer.
- * @param completionStatus Either #kStatus_Success or an error code describing how the transfer completed.
+ * @param completionStatus Either kStatus_Success or an error code describing how the transfer completed.
  * @param userData Arbitrary pointer-sized value passed from the application.
  */
 typedef void (*lpi2c_master_edma_transfer_callback_t)(LPI2C_Type *base,
@@ -54,13 +57,17 @@ struct _lpi2c_master_edma_handle
     LPI2C_Type *base;                 /*!< LPI2C base pointer. */
     bool isBusy;                      /*!< Transfer state machine current state. */
     uint8_t nbytes;                   /*!< eDMA minor byte transfer count initially configured. */
-    uint16_t commandBuffer[7];        /*!< LPI2C command sequence. */
+    uint16_t commandBuffer[20];       /*!< LPI2C command sequence. When all 10 command words are used:
+         Start&addr&write[1 word] + subaddr[4 words] + restart&addr&read[1 word] + receive&Size[4 words] */
     lpi2c_master_transfer_t transfer; /*!< Copy of the current transfer info. */
     lpi2c_master_edma_transfer_callback_t completionCallback; /*!< Callback function pointer. */
     void *userData;                                           /*!< Application data passed to callback. */
     edma_handle_t *rx;                                        /*!< Handle for receive DMA channel. */
     edma_handle_t *tx;                                        /*!< Handle for transmit DMA channel. */
-    edma_tcd_t tcds[2]; /*!< Software TCD. Two are allocated to provide enough room to align to 32-bytes. */
+    edma_tcd_t tcds[3]; /*!< Software TCD. Three are allocated to provide enough room to align to 32-bytes. */
+    uint32_t remainingCommand;        /* Number of the remaining commands to be copied by the interrupt. */
+    uint32_t commandIndex;            /* Head of the remaing commands. */
+    bool enableTxReadyFlag;           /* Flag to enable interrupt for copying remainig commands. */
 };
 
 /*! @} */
@@ -78,8 +85,10 @@ extern "C" {
  * @{
  */
 
-/*! @name Master DMA */
-/*@{*/
+/*!
+ * @name Master DMA
+ * @{
+ */
 
 /*!
  * @brief Create a new handle for the LPI2C master DMA APIs.
@@ -114,7 +123,7 @@ void LPI2C_MasterCreateEDMAHandle(LPI2C_Type *base,
  * @param base The LPI2C peripheral base address.
  * @param handle Pointer to the LPI2C master driver handle.
  * @param transfer The pointer to the transfer descriptor.
- * @retval #kStatus_Success The transaction was started successfully.
+ * @retval kStatus_Success The transaction was started successfully.
  * @retval #kStatus_LPI2C_Busy Either another master is currently utilizing the bus, or another DMA
  *      transaction is already in progress.
  */
@@ -128,8 +137,8 @@ status_t LPI2C_MasterTransferEDMA(LPI2C_Type *base,
  * @param base The LPI2C peripheral base address.
  * @param handle Pointer to the LPI2C master driver handle.
  * @param[out] count Number of bytes transferred so far by the non-blocking transaction.
- * @retval #kStatus_Success
- * @retval #kStatus_NoTransferInProgress There is not a DMA transaction currently in progress.
+ * @retval kStatus_Success
+ * @retval kStatus_NoTransferInProgress There is not a DMA transaction currently in progress.
  */
 status_t LPI2C_MasterTransferGetCountEDMA(LPI2C_Type *base, lpi2c_master_edma_handle_t *handle, size_t *count);
 
@@ -141,12 +150,12 @@ status_t LPI2C_MasterTransferGetCountEDMA(LPI2C_Type *base, lpi2c_master_edma_ha
  *
  * @param base The LPI2C peripheral base address.
  * @param handle Pointer to the LPI2C master driver handle.
- * @retval #kStatus_Success A transaction was successfully aborted.
+ * @retval kStatus_Success A transaction was successfully aborted.
  * @retval #kStatus_LPI2C_Idle There is not a DMA transaction currently in progress.
  */
 status_t LPI2C_MasterTransferAbortEDMA(LPI2C_Type *base, lpi2c_master_edma_handle_t *handle);
 
-/*@}*/
+/*! @} */
 
 /*! @} */
 
@@ -154,4 +163,4 @@ status_t LPI2C_MasterTransferAbortEDMA(LPI2C_Type *base, lpi2c_master_edma_handl
 }
 #endif
 
-#endif /* _FSL_LPI2C_EDMA_H_ */
+#endif /* FSL_LPI2C_EDMA_H_ */

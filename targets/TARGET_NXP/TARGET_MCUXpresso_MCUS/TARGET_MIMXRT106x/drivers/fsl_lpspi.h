@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2023, 2024-2025 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef _FSL_LPSPI_H_
-#define _FSL_LPSPI_H_
+#ifndef FSL_LPSPI_H_
+#define FSL_LPSPI_H_
 
 #include "fsl_common.h"
 
@@ -20,26 +20,36 @@
  *********************************************************************************************************************/
 
 /*! @name Driver version */
-/*@{*/
-/*! @brief LPSPI driver version 2.0.3. */
-#define FSL_LPSPI_DRIVER_VERSION (MAKE_VERSION(2, 0, 3))
-/*@}*/
+/*! @{ */
+/*! @brief LPSPI driver version. */
+#define FSL_LPSPI_DRIVER_VERSION (MAKE_VERSION(2, 7, 4))
+/*! @} */
 
 #ifndef LPSPI_DUMMY_DATA
 /*! @brief LPSPI dummy data if no Tx data.*/
 #define LPSPI_DUMMY_DATA (0x00U) /*!< Dummy data used for tx if there is not txData. */
 #endif
 
+/*! @brief Retry times for waiting flag. */
+#ifndef SPI_RETRY_TIMES
+#ifdef CONFIG_SPI_RETRY_TIMES
+#define SPI_RETRY_TIMES CONFIG_SPI_RETRY_TIMES
+#else
+#define SPI_RETRY_TIMES 0U /* Define to zero means keep waiting until the flag is assert/deassert. */
+#endif
+#endif
+
 /*! @brief Global variable for dummy data value setting. */
 extern volatile uint8_t g_lpspiDummyData[];
 
 /*! @brief Status for the LPSPI driver.*/
-enum _lpspi_status
+enum
 {
     kStatus_LPSPI_Busy       = MAKE_STATUS(kStatusGroup_LPSPI, 0), /*!< LPSPI transfer is busy.*/
     kStatus_LPSPI_Error      = MAKE_STATUS(kStatusGroup_LPSPI, 1), /*!< LPSPI driver error. */
     kStatus_LPSPI_Idle       = MAKE_STATUS(kStatusGroup_LPSPI, 2), /*!< LPSPI is idle.*/
-    kStatus_LPSPI_OutOfRange = MAKE_STATUS(kStatusGroup_LPSPI, 3)  /*!< LPSPI transfer out Of range. */
+    kStatus_LPSPI_OutOfRange = MAKE_STATUS(kStatusGroup_LPSPI, 3), /*!< LPSPI transfer out Of range. */
+    kStatus_LPSPI_Timeout    = MAKE_STATUS(kStatusGroup_LPSPI, 4)  /*!< LPSPI timeout polling status flags. */
 };
 
 /*! @brief LPSPI status flags in SPIx_SR register.*/
@@ -173,6 +183,15 @@ typedef enum _lpspi_data_out_config
     kLpspiDataOutTristate = 1U  /*!< Data out is tristated when chip select is de-asserted */
 } lpspi_data_out_config_t;
 
+#if !(defined(FSL_FEATURE_LPSPI_HAS_NO_PCSCFG) && FSL_FEATURE_LPSPI_HAS_NO_PCSCFG)
+/*! @brief LPSPI cs function configuration. */
+typedef enum _lpspi_pcs_function_config
+{
+    kLPSPI_PcsAsCs = 0U,        /*!< PCS pin select as cs function */
+    kLPSPI_PcsAsData = 1U,      /*!< PCS pin select as date function */
+} lpspi_pcs_function_config_t;
+#endif
+
 /*! @brief LPSPI transfer width configuration. */
 typedef enum _lpspi_transfer_width
 {
@@ -189,8 +208,12 @@ typedef enum _lpspi_delay_type
     kLPSPI_BetweenTransfer /*!< Delay between transfers. */
 } lpspi_delay_type_t;
 
-#define LPSPI_MASTER_PCS_SHIFT (4U)   /*!< LPSPI master PCS shift macro , internal used. */
-#define LPSPI_MASTER_PCS_MASK (0xF0U) /*!< LPSPI master PCS shift macro , internal used. */
+#define LPSPI_MASTER_PCS_SHIFT (4U)    /*!< LPSPI master PCS shift macro , internal used. */
+#define LPSPI_MASTER_PCS_MASK  (0xF0U) /*!< LPSPI master PCS shift macro , internal used. */
+#if !(defined(FSL_FEATURE_LPSPI_HAS_NO_MULTI_WIDTH) && FSL_FEATURE_LPSPI_HAS_NO_MULTI_WIDTH)
+#define LPSPI_MASTER_WIDTH_SHIFT (16U)      /*!< LPSPI master width shift macro, internal used */
+#define LPSPI_MASTER_WIDTH_MASK  (0x30000U) /*!< LPSPI master width shift mask, internal used */
+#endif
 
 /*! @brief Use this enumeration for LPSPI master transfer configFlags. */
 enum _lpspi_transfer_config_flag_for_master
@@ -199,6 +222,11 @@ enum _lpspi_transfer_config_flag_for_master
     kLPSPI_MasterPcs1 = 1U << LPSPI_MASTER_PCS_SHIFT, /*!< LPSPI master transfer use PCS1 signal */
     kLPSPI_MasterPcs2 = 2U << LPSPI_MASTER_PCS_SHIFT, /*!< LPSPI master transfer use PCS2 signal */
     kLPSPI_MasterPcs3 = 3U << LPSPI_MASTER_PCS_SHIFT, /*!< LPSPI master transfer use PCS3 signal */
+#if !(defined(FSL_FEATURE_LPSPI_HAS_NO_MULTI_WIDTH) && FSL_FEATURE_LPSPI_HAS_NO_MULTI_WIDTH)
+    kLPSPI_MasterWidth1 = 0U << LPSPI_MASTER_WIDTH_SHIFT, /*!< LPSPI master transfer 1bit */
+    kLPSPI_MasterWidth2 = 1U << LPSPI_MASTER_WIDTH_SHIFT, /*!< LPSPI master transfer 2bit */
+    kLPSPI_MasterWidth4 = 2U << LPSPI_MASTER_WIDTH_SHIFT, /*!< LPSPI master transfer 4bit */
+#endif
 
     kLPSPI_MasterPcsContinuous = 1U << 20, /*!< Is PCS signal continuous */
 
@@ -217,8 +245,8 @@ enum _lpspi_transfer_config_flag_for_master
                   */
 };
 
-#define LPSPI_SLAVE_PCS_SHIFT (4U)   /*!< LPSPI slave PCS shift macro , internal used. */
-#define LPSPI_SLAVE_PCS_MASK (0xF0U) /*!< LPSPI slave PCS shift macro , internal used. */
+#define LPSPI_SLAVE_PCS_SHIFT (4U)    /*!< LPSPI slave PCS shift macro , internal used. */
+#define LPSPI_SLAVE_PCS_MASK  (0xF0U) /*!< LPSPI slave PCS shift macro , internal used. */
 
 /*! @brief Use this enumeration for LPSPI slave transfer configFlags. */
 enum _lpspi_transfer_config_flag_for_slave
@@ -272,9 +300,14 @@ typedef struct _lpspi_master_config
 
     lpspi_pin_config_t pinCfg; /*!< Configures which pins are used for input and output data
                                 *during single bit transfers.*/
-
+    
+#if !(defined(FSL_FEATURE_LPSPI_HAS_NO_PCSCFG) && FSL_FEATURE_LPSPI_HAS_NO_PCSCFG)
+    lpspi_pcs_function_config_t pcsFunc; /*!< Configures cs pins function.*/
+#endif
     lpspi_data_out_config_t dataOutConfig; /*!< Configures if the output data is tristated
                                             * between accesses (LPSPI_PCS is negated). */
+    bool enableInputDelay; /*!< Enable master to sample the input data on a delayed SCK. This can help improve slave
+                              setup time. Refer to device data sheet for specific time length. */
 } lpspi_master_config_t;
 
 /*! @brief LPSPI slave configuration structure.*/
@@ -334,7 +367,7 @@ typedef void (*lpspi_slave_transfer_callback_t)(LPSPI_Type *base,
 /*! @brief LPSPI master/slave transfer structure.*/
 typedef struct _lpspi_transfer
 {
-    uint8_t *txData;          /*!< Send buffer. */
+    const uint8_t *txData;    /*!< Send buffer. */
     uint8_t *rxData;          /*!< Receive buffer. */
     volatile size_t dataSize; /*!< Transfer bytes. */
 
@@ -349,7 +382,10 @@ struct _lpspi_master_handle
     volatile bool isPcsContinuous; /*!< Is PCS continuous in transfer. */
     volatile bool writeTcrInIsr;   /*!< A flag that whether should write TCR in ISR. */
 
-    volatile bool isByteSwap; /*!< A flag that whether should byte swap. */
+    volatile bool isByteSwap;        /*!< A flag that whether should byte swap. */
+    volatile bool isTxMask;          /*!< A flag that whether TCR[TXMSK] is set. */
+    volatile uint16_t bytesPerFrame; /*!< Number of bytes in each frame */
+    volatile uint16_t frameSize;     /*!< Backup of TCR[FRAMESZ] */
 
     volatile uint8_t fifoSize; /*!< FIFO dataSize. */
 
@@ -358,7 +394,7 @@ struct _lpspi_master_handle
     volatile uint8_t bytesEachWrite; /*!< Bytes for each write TDR. */
     volatile uint8_t bytesEachRead;  /*!< Bytes for each read RDR. */
 
-    uint8_t *volatile txData;             /*!< Send buffer. */
+    const uint8_t *volatile txData;            /*!< Send buffer. */
     uint8_t *volatile rxData;             /*!< Receive buffer. */
     volatile size_t txRemainingByteCount; /*!< Number of bytes remaining to send.*/
     volatile size_t rxRemainingByteCount; /*!< Number of bytes remaining to receive.*/
@@ -388,7 +424,7 @@ struct _lpspi_slave_handle
     volatile uint8_t bytesEachWrite; /*!< Bytes for each write TDR. */
     volatile uint8_t bytesEachRead;  /*!< Bytes for each read RDR. */
 
-    uint8_t *volatile txData; /*!< Send buffer. */
+    const uint8_t *volatile txData;           /*!< Send buffer. */
     uint8_t *volatile rxData; /*!< Receive buffer. */
 
     volatile size_t txRemainingByteCount; /*!< Number of bytes remaining to send.*/
@@ -481,6 +517,14 @@ void LPSPI_Deinit(LPSPI_Type *base);
 void LPSPI_Reset(LPSPI_Type *base);
 
 /*!
+ * @brief Get the LPSPI instance from peripheral base address.
+ *
+ * @param base LPSPI peripheral base address.
+ * @return LPSPI instance.
+ */
+uint32_t LPSPI_GetInstance(LPSPI_Type *base);
+
+/*!
  * @brief Enables the LPSPI peripheral and sets the MCR MDIS to 0.
  *
  * @param base LPSPI peripheral address.
@@ -496,6 +540,15 @@ static inline void LPSPI_Enable(LPSPI_Type *base, bool enable)
     {
         base->CR &= ~LPSPI_CR_MEN_MASK;
     }
+#if defined(FSL_FEATURE_LPSPI_HAS_ERRATA_051472) && FSL_FEATURE_LPSPI_HAS_ERRATA_051472
+    /* ERRATA051472: The SR[REF] would assert if software disables the LPSPI module 
+       after receiving some data and then enabled the LPSPI again without performing a software reset.
+       Clear SR[REF] flag after LPSPI module enabled*/
+    if ((base->SR & (uint32_t)kLPSPI_ReceiveErrorFlag) != 0U)
+    {
+        base->SR = (uint32_t)kLPSPI_ReceiveErrorFlag;
+    }
+#endif
 }
 
 /*!
@@ -522,7 +575,7 @@ static inline uint32_t LPSPI_GetStatusFlags(LPSPI_Type *base)
  * @param base LPSPI peripheral address.
  * @return The LPSPI Tx FIFO size.
  */
-static inline uint32_t LPSPI_GetTxFifoSize(LPSPI_Type *base)
+static inline uint8_t LPSPI_GetTxFifoSize(LPSPI_Type *base)
 {
     return (1U << ((base->PARAM & LPSPI_PARAM_TXFIFO_MASK) >> LPSPI_PARAM_TXFIFO_SHIFT));
 }
@@ -532,7 +585,7 @@ static inline uint32_t LPSPI_GetTxFifoSize(LPSPI_Type *base)
  * @param base LPSPI peripheral address.
  * @return The LPSPI Rx FIFO size.
  */
-static inline uint32_t LPSPI_GetRxFifoSize(LPSPI_Type *base)
+static inline uint8_t LPSPI_GetRxFifoSize(LPSPI_Type *base)
 {
     return (1U << ((base->PARAM & LPSPI_PARAM_RXFIFO_MASK) >> LPSPI_PARAM_RXFIFO_SHIFT));
 }
@@ -575,6 +628,34 @@ static inline void LPSPI_ClearStatusFlags(LPSPI_Type *base, uint32_t statusFlags
     base->SR = statusFlags; /*!< The status flags are cleared by writing 1 (w1c).*/
 }
 
+/*
+ * Avoid register reading problems: Reading the Transmit Command Register will return
+ * the current state of the command register. Reading the Transmit Command Register at the
+ * same time that the Transmit Command Register is loaded from the transmit FIFO, can
+ * return an incorrect Transmit Command Register value. It is recommended:
+ * - to either read the Transmit Command Register when the transmit FIFO is empty,
+ * - or to read the Transmit Command Register more than once and then compare the
+ *   returned values.
+ */
+static inline uint32_t LPSPI_GetTcr(LPSPI_Type *base)
+{
+    uint32_t tcr_values[2];
+    uint32_t i = 0u;
+
+    tcr_values[0] = base->TCR;
+    do
+    {
+        i = (i + 1u) % 2u;
+        /* ERR050606 LPSPI: TCR value does not get resampled when polling the register
+         * Workaround: After reading the Transmit Command Register must always access a different register in
+         * between subsequent reads from TCR.
+         */
+        (void)base->SR;
+        tcr_values[i] = base->TCR;
+    } while(tcr_values[0] != tcr_values[1]);
+
+    return tcr_values[0];
+}
 /*!
  *@}
  */
@@ -700,12 +781,12 @@ static inline uint32_t LPSPI_GetRxRegisterAddress(LPSPI_Type *base)
 /*!
  * @brief Check the argument for transfer .
  *
+ * @param base LPSPI peripheral address.
  * @param transfer the transfer struct to be used.
- * @param bitPerFrame The bit size of one frame.
- * @param bytePerFrame The byte size of one frame.
+ * @param isEdma True to check for EDMA transfer, false to check interrupt non-blocking transfer
  * @return Return true for right and false for wrong.
  */
-bool LPSPI_CheckTransferArgument(lpspi_transfer_t *transfer, uint32_t bitsPerFrame, uint32_t bytesPerFrame);
+bool LPSPI_CheckTransferArgument(LPSPI_Type *base, lpspi_transfer_t *transfer, bool isEdma);
 
 /*!
  * @brief Configures the LPSPI for either master or slave.
@@ -718,6 +799,41 @@ bool LPSPI_CheckTransferArgument(lpspi_transfer_t *transfer, uint32_t bitsPerFra
 static inline void LPSPI_SetMasterSlaveMode(LPSPI_Type *base, lpspi_master_slave_mode_t mode)
 {
     base->CFGR1 = (base->CFGR1 & (~LPSPI_CFGR1_MASTER_MASK)) | LPSPI_CFGR1_MASTER(mode);
+}
+
+/*!
+ * @brief Configures the peripheral chip select used for the transfer.
+ *
+ * @param base LPSPI peripheral address.
+ * @param select LPSPI Peripheral Chip Select (PCS) configuration.
+ */
+static inline void LPSPI_SelectTransferPCS(LPSPI_Type *base, lpspi_which_pcs_t select)
+{
+    base->TCR = (LPSPI_GetTcr(base) & (~LPSPI_TCR_PCS_MASK)) | LPSPI_TCR_PCS((uint8_t)select);
+}
+
+/*!
+ * @brief Set the PCS signal to continuous or uncontinuous mode.
+ *
+ * @note In master mode, continuous transfer will keep the PCS asserted at the end of the frame size, until a command
+ * word is received that starts a new frame. So PCS must be set back to uncontinuous when transfer finishes.
+ * In slave mode, when continuous transfer is enabled, the LPSPI will only transmit the first frame size bits, after
+ * that the LPSPI will transmit received data back (assuming a 32-bit shift register).
+ *
+ * @param base LPSPI peripheral address.
+ * @param IsContinous True to set the transfer PCS to continuous mode, false to set to uncontinuous mode.
+ */
+static inline void LPSPI_SetPCSContinous(LPSPI_Type *base, bool IsContinous)
+{
+    uint32_t tcr = LPSPI_GetTcr(base);
+    if (IsContinous)
+    {
+        base->TCR = tcr | LPSPI_TCR_CONT_MASK;
+    }
+    else
+    {
+        base->TCR = tcr & ~LPSPI_TCR_CONT_MASK;
+    }
 }
 
 /*!
@@ -740,7 +856,40 @@ static inline bool LPSPI_IsMaster(LPSPI_Type *base)
  */
 static inline void LPSPI_FlushFifo(LPSPI_Type *base, bool flushTxFifo, bool flushRxFifo)
 {
-    base->CR |= ((uint32_t)flushTxFifo << LPSPI_CR_RTF_SHIFT) | ((uint32_t)flushRxFifo << LPSPI_CR_RRF_SHIFT);
+#if defined(FSL_FEATURE_LPSPI_HAS_ERRATA_050456) && FSL_FEATURE_LPSPI_HAS_ERRATA_050456
+    /*
+     * Resetting the FIFO using CR[RTF] and CR[RRF] does not clear the FIFO pointers completely.
+     * Workaround by reseting the entire module using CR[RST] bit.
+     */
+
+    (void)flushTxFifo;
+    (void)flushRxFifo;
+
+    /* Save current state before resetting */
+    bool enabled = base->CR & LPSPI_CR_MEN_MASK;
+    uint32_t cfgr1 = base->CFGR1;
+    uint32_t ccr = base->CCR;
+    uint32_t ccr1 = base->CCR1;
+
+    /* To read the current state of the existing command word, LPSPI must be enabled */
+    LPSPI_Enable(base, true);
+    uint32_t tcr = LPSPI_GetTcr(base);
+
+    /* Reset all internal logic and registers. Bit remains set until cleared by software */
+    LPSPI_Enable(base, false);
+    base->CR |= LPSPI_CR_RST_MASK;
+    base->CR &= ~LPSPI_CR_RST_MASK;
+
+    /* Restore saved registers */
+    base->CFGR1 = cfgr1;
+    base->CCR = ccr;
+    base->CCR1 = ccr1;
+    base->TCR = tcr;
+
+    LPSPI_Enable(base, enabled);
+#else
+    base->CR |= ((flushTxFifo ? 1U : 0U) << LPSPI_CR_RTF_SHIFT) | ((flushRxFifo ? 1U : 0U) << LPSPI_CR_RRF_SHIFT);
+#endif
 }
 
 /*!
@@ -799,7 +948,7 @@ static inline void LPSPI_SetAllPcsPolarity(LPSPI_Type *base, uint32_t mask)
  */
 static inline void LPSPI_SetFrameSize(LPSPI_Type *base, uint32_t frameSize)
 {
-    base->TCR = (base->TCR & ~LPSPI_TCR_FRAMESZ_MASK) | LPSPI_TCR_FRAMESZ(frameSize - 1);
+    base->TCR = (LPSPI_GetTcr(base) & ~LPSPI_TCR_FRAMESZ_MASK) | LPSPI_TCR_FRAMESZ(frameSize - 1U);
 }
 
 /*!
@@ -979,8 +1128,7 @@ status_t LPSPI_MasterTransferBlocking(LPSPI_Type *base, lpspi_transfer_t *transf
  * @brief LPSPI master transfer data using an interrupt method.
  *
  * This function transfers data using an interrupt method. This is a non-blocking function, which returns right away.
- * When all data
- * is transferred, the callback function is called.
+ * When all data is transferred, the callback function is called.
  *
  * Note:
  * The transfer data size should be integer multiples of bytesPerFrame if bytesPerFrame is less than or equal to 4.
@@ -1047,8 +1195,7 @@ void LPSPI_SlaveTransferCreateHandle(LPSPI_Type *base,
  * @brief LPSPI slave transfer data using an interrupt method.
  *
  * This function transfer data using an interrupt method. This is a non-blocking function, which returns right away.
- * When all data
- * is transferred, the callback function is called.
+ * When all data is transferred, the callback function is called.
  *
  * Note:
  * The transfer data size should be integer multiples of bytesPerFrame if bytesPerFrame is less than or equal to 4.
@@ -1096,14 +1243,39 @@ void LPSPI_SlaveTransferAbort(LPSPI_Type *base, lpspi_slave_handle_t *handle);
 void LPSPI_SlaveTransferHandleIRQ(LPSPI_Type *base, lpspi_slave_handle_t *handle);
 
 /*!
+ * @brief Wait for tx FIFO to be empty.
+ *
+ * This function wait the tx fifo empty
+ *
+ * @param base LPSPI peripheral address.
+ * @return true for the tx FIFO is ready, false is not.
+ */
+bool LPSPI_WaitTxFifoEmpty(LPSPI_Type *base);
+
+/*!
  *@}
  */
 
+/*!
+ * @name Common IRQ Handler
+ * @{
+ */
+
+/*!
+ * @brief LPSPI driver IRQ handler common entry.
+ *
+ * This function provides the common IRQ request entry for LPSPI.
+ *
+ * @param instance LPSPI instance.
+ */
+void LPSPI_DriverIRQHandler(uint32_t instance);
+
+/*! @} */
+
 #if defined(__cplusplus)
 }
-#endif /*_cplusplus*/
-       /*!
-        *@}
-        */
+#endif
 
-#endif /*_FSL_LPSPI_H_*/
+/*! @}*/
+
+#endif /*FSL_LPSPI_H_*/

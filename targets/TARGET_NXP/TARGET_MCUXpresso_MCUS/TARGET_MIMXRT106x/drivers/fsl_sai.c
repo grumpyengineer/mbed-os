@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2022, 2025 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -16,7 +16,8 @@
 /*******************************************************************************
  * Definitations
  ******************************************************************************/
-enum _sai_transfer_state
+/*! @brief _sai_transfer_state sai transfer state.*/
+enum
 {
     kSAI_Busy = 0x0U, /*!< SAI is busy */
     kSAI_Idle,        /*!< Transfer is done. */
@@ -29,9 +30,47 @@ typedef void (*sai_tx_isr_t)(I2S_Type *base, sai_handle_t *saiHandle);
 /*! @brief Typedef for sai rx interrupt handler. */
 typedef void (*sai_rx_isr_t)(I2S_Type *base, sai_handle_t *saiHandle);
 
+/*! @brief check flag avalibility */
+#define IS_SAI_FLAG_SET(reg, flag) (((reg) & ((uint32_t)flag)) != 0UL)
+
+#if defined(SAI_RSTS)
+#define SAI_RESETS_ARRAY SAI_RSTS
+#endif
 /*******************************************************************************
  * Prototypes
  ******************************************************************************/
+/*!
+ * @brief sai get rx enabled interrupt status.
+ *
+ *
+ * @param base SAI base pointer.
+ * @param enableFlag enable flag to check.
+ * @param statusFlag status flag to check.
+ */
+static bool SAI_RxGetEnabledInterruptStatus(I2S_Type *base, uint32_t enableFlag, uint32_t statusFlag);
+
+/*!
+ * @brief sai get tx enabled interrupt status.
+ *
+ *
+ * @param base SAI base pointer.
+ * @param enableFlag enable flag to check.
+ * @param statusFlag status flag to check.
+ */
+static bool SAI_TxGetEnabledInterruptStatus(I2S_Type *base, uint32_t enableFlag, uint32_t statusFlag);
+
+/*!
+ * @brief Set the master clock divider.
+ *
+ * This API will compute the master clock divider according to master clock frequency and master
+ * clock source clock source frequency.
+ *
+ * @param base SAI base pointer.
+ * @param mclk_Hz Mater clock frequency in Hz.
+ * @param mclkSrcClock_Hz Master clock source frequency in Hz.
+ */
+static bool SAI_TxGetEnabledInterruptStatus(I2S_Type *base, uint32_t enableFlag, uint32_t statusFlag);
+
 #if ((defined(FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER) && (FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER)) || \
      (defined(FSL_FEATURE_SAI_HAS_MCR_MCLK_POST_DIV) && (FSL_FEATURE_SAI_HAS_MCR_MCLK_POST_DIV)))
 
@@ -70,7 +109,7 @@ static void SAI_WriteNonBlocking(I2S_Type *base,
                                  uint32_t channel,
                                  uint32_t channelMask,
                                  uint32_t endChannel,
-                                 uint32_t bitWidth,
+                                 uint8_t bitWidth,
                                  uint8_t *buffer,
                                  uint32_t size);
 
@@ -89,7 +128,7 @@ static void SAI_ReadNonBlocking(I2S_Type *base,
                                 uint32_t channel,
                                 uint32_t channelMask,
                                 uint32_t endChannel,
-                                uint32_t bitWidth,
+                                uint8_t bitWidth,
                                 uint8_t *buffer,
                                 uint32_t size);
 
@@ -110,6 +149,10 @@ static void SAI_GetCommonConfig(sai_transceiver_t *config,
  ******************************************************************************/
 /* Base pointer array */
 static I2S_Type *const s_saiBases[] = I2S_BASE_PTRS;
+#if defined(SAI_RESETS_ARRAY)
+/* Reset array */
+static const reset_ip_name_t s_saiReset[] = SAI_RESETS_ARRAY;
+#endif
 /*!@brief SAI handle pointer */
 static sai_handle_t *s_saiHandle[ARRAY_SIZE(s_saiBases)][2];
 /* IRQ number array */
@@ -127,6 +170,20 @@ static sai_rx_isr_t s_saiRxIsr;
 /*******************************************************************************
  * Code
  ******************************************************************************/
+static bool SAI_RxGetEnabledInterruptStatus(I2S_Type *base, uint32_t enableFlag, uint32_t statusFlag)
+{
+    uint32_t rcsr = base->RCSR;
+
+    return IS_SAI_FLAG_SET(rcsr, enableFlag) && IS_SAI_FLAG_SET(rcsr, statusFlag);
+}
+
+static bool SAI_TxGetEnabledInterruptStatus(I2S_Type *base, uint32_t enableFlag, uint32_t statusFlag)
+{
+    uint32_t tcsr = base->TCSR;
+
+    return IS_SAI_FLAG_SET(tcsr, enableFlag) && IS_SAI_FLAG_SET(tcsr, statusFlag);
+}
+
 #if ((defined(FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER) && (FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER)) || \
      (defined(FSL_FEATURE_SAI_HAS_MCR_MCLK_POST_DIV) && (FSL_FEATURE_SAI_HAS_MCR_MCLK_POST_DIV)))
 static void SAI_SetMasterClockDivider(I2S_Type *base, uint32_t mclk_Hz, uint32_t mclkSrcClock_Hz)
@@ -159,10 +216,10 @@ static void SAI_SetMasterClockDivider(I2S_Type *base, uint32_t mclk_Hz, uint32_t
     uint32_t max_fract         = 256;
 
     /* Compute the max fract number */
-    max_fract = targetFreq * 4096 / sourceFreq + 1;
-    if (max_fract > 256)
+    max_fract = targetFreq * 4096U / sourceFreq + 1U;
+    if (max_fract > 256U)
     {
-        max_fract = 256;
+        max_fract = 256U;
     }
 
     /* Looking for the closet frequency */
@@ -170,21 +227,21 @@ static void SAI_SetMasterClockDivider(I2S_Type *base, uint32_t mclk_Hz, uint32_t
     {
         mul_freq = sourceFreq * fract;
         remaind  = mul_freq % targetFreq;
-        divide   = mul_freq / targetFreq;
+        divide   = (uint16_t)(mul_freq / targetFreq);
 
         /* Find the exactly frequency */
-        if (remaind == 0)
+        if (remaind == 0U)
         {
             current_fract  = fract;
-            current_divide = mul_freq / targetFreq;
+            current_divide = (uint16_t)(mul_freq / targetFreq);
             break;
         }
 
         /* Closer to next one, set the closest to next data */
-        if (remaind > mclk_Hz / 2)
+        if (remaind > mclk_Hz / 2U)
         {
             remaind = targetFreq - remaind;
-            divide += 1;
+            divide += 1U;
         }
 
         /* Update the closest div and fract */
@@ -197,10 +254,10 @@ static void SAI_SetMasterClockDivider(I2S_Type *base, uint32_t mclk_Hz, uint32_t
     }
 
     /* Fill the computed fract and divider to registers */
-    base->MDR = I2S_MDR_DIVIDE(current_divide - 1) | I2S_MDR_FRACT(current_fract - 1);
+    base->MDR = I2S_MDR_DIVIDE(current_divide - 1UL) | I2S_MDR_FRACT(current_fract - 1UL);
 
     /* Waiting for the divider updated */
-    while (base->MCR & I2S_MCR_DUF_MASK)
+    while ((base->MCR & I2S_MCR_DUF_MASK) != 0UL)
     {
     }
 #endif
@@ -214,13 +271,22 @@ static uint32_t SAI_GetInstance(I2S_Type *base)
     /* Find the instance index from base address mappings. */
     for (instance = 0; instance < ARRAY_SIZE(s_saiBases); instance++)
     {
-        if (s_saiBases[instance] == base)
+        if (MSDK_REG_SECURE_ADDR(s_saiBases[instance]) == MSDK_REG_SECURE_ADDR(base))
         {
             break;
         }
     }
 
-    assert(instance < ARRAY_SIZE(s_saiBases));
+    if (instance == ARRAY_SIZE(s_saiBases)) {
+        assert(false);
+	/* asserts may not always be enabled. As such, return NULL here to
+	 * avoid compilation warnings complaining about a possible out-of-bounds
+	 * access. If the user decides to disable the asserts, it is up to them
+	 * to debug in case of out-of-bounds access as SAI_GetInstance() will
+	 * return a valid instance.
+	 */
+	return 0;
+    }
 
     return instance;
 }
@@ -229,12 +295,12 @@ static void SAI_WriteNonBlocking(I2S_Type *base,
                                  uint32_t channel,
                                  uint32_t channelMask,
                                  uint32_t endChannel,
-                                 uint32_t bitWidth,
+                                 uint8_t bitWidth,
                                  uint8_t *buffer,
                                  uint32_t size)
 {
-    uint32_t i = 0;
-    uint8_t j = 0, m = 0;
+    uint32_t i = 0, j = 0U;
+    uint8_t m            = 0;
     uint8_t bytesPerWord = bitWidth / 8U;
     uint32_t data        = 0;
     uint32_t temp        = 0;
@@ -243,7 +309,7 @@ static void SAI_WriteNonBlocking(I2S_Type *base,
     {
         for (j = channel; j <= endChannel; j++)
         {
-            if ((1U << j) & channelMask)
+            if (IS_SAI_FLAG_SET((1UL << j), channelMask))
             {
                 for (m = 0; m < bytesPerWord; m++)
                 {
@@ -262,12 +328,12 @@ static void SAI_ReadNonBlocking(I2S_Type *base,
                                 uint32_t channel,
                                 uint32_t channelMask,
                                 uint32_t endChannel,
-                                uint32_t bitWidth,
+                                uint8_t bitWidth,
                                 uint8_t *buffer,
                                 uint32_t size)
 {
-    uint32_t i = 0;
-    uint8_t j = 0, m = 0;
+    uint32_t i = 0, j = 0;
+    uint8_t m            = 0;
     uint8_t bytesPerWord = bitWidth / 8U;
     uint32_t data        = 0;
 
@@ -275,12 +341,12 @@ static void SAI_ReadNonBlocking(I2S_Type *base,
     {
         for (j = channel; j <= endChannel; j++)
         {
-            if ((1U << j) & channelMask)
+            if (IS_SAI_FLAG_SET((1UL << j), channelMask))
             {
                 data = base->RDR[j];
                 for (m = 0; m < bytesPerWord; m++)
                 {
-                    *buffer = (data >> (8U * m)) & 0xFF;
+                    *buffer = (uint8_t)((data >> (8U * m)) & 0xFFU);
                     buffer++;
                 }
             }
@@ -296,9 +362,9 @@ static void SAI_GetCommonConfig(sai_transceiver_t *config,
     assert(NULL != config);
     assert(saiChannelMask != 0U);
 
-    memset(config, 0U, sizeof(sai_transceiver_t));
+    (void)memset(config, 0, sizeof(sai_transceiver_t));
 
-    config->channelMask = saiChannelMask;
+    config->channelMask = (uint8_t)saiChannelMask;
     /* sync mode default configurations */
     config->syncMode = kSAI_ModeAsync;
 
@@ -306,15 +372,17 @@ static void SAI_GetCommonConfig(sai_transceiver_t *config,
     config->masterSlave = kSAI_Master;
 
     /* bit default configurations */
+#if defined(FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP) && FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP
     config->bitClock.bclkSrcSwap    = false;
+#endif
     config->bitClock.bclkInputDelay = false;
     config->bitClock.bclkPolarity   = kSAI_SampleOnRisingEdge;
     config->bitClock.bclkSource     = kSAI_BclkSourceMclkDiv;
 
     /* frame sync default configurations */
-    config->frameSync.frameSyncWidth = bitWidth;
+    config->frameSync.frameSyncWidth = (uint8_t)bitWidth;
     config->frameSync.frameSyncEarly = true;
-#if defined(FSL_FEATURE_SAI_HAS_FRAME_SYNC_ON_DEMAND) && FSL_FEATURE_SAI_HAS_FRAME_SYNC_ON_DEMAND
+#if defined(FSL_FEATURE_SAI_HAS_ON_DEMAND_MODE) && FSL_FEATURE_SAI_HAS_ON_DEMAND_MODE
     config->frameSync.frameSyncGenerateOnDemand = false;
 #endif
     config->frameSync.frameSyncPolarity = kSAI_PolarityActiveLow;
@@ -324,281 +392,22 @@ static void SAI_GetCommonConfig(sai_transceiver_t *config,
     config->serialData.dataMode = kSAI_DataPinStateOutputZero;
 #endif
     config->serialData.dataOrder           = kSAI_DataMSB;
-    config->serialData.dataWord0Length     = bitWidth;
-    config->serialData.dataWordLength      = bitWidth;
-    config->serialData.dataWordNLength     = bitWidth;
-    config->serialData.dataFirstBitShifted = bitWidth;
-    config->serialData.dataWordNum         = 2U;
-    config->serialData.dataMaskedWord      = mode;
 
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    /* fifo configurations */
-    config->fifo.fifoWatermark = FSL_FEATURE_SAI_FIFO_COUNT / 2U;
-#endif
+    /* Bounds checking before the cast */
+    if (bitWidth > kSAI_WordWidth32bits)
+    {
+        bitWidth = kSAI_WordWidth32bits;
+    }
+    config->serialData.dataWord0Length     = (uint8_t)bitWidth;
+    config->serialData.dataWordLength      = (uint8_t)bitWidth;
+    config->serialData.dataWordNLength     = (uint8_t)bitWidth;
+    config->serialData.dataFirstBitShifted = (uint8_t)bitWidth;
+    config->serialData.dataWordNum         = 2U;
+    config->serialData.dataMaskedWord      = (uint32_t)mode;
 
 #if defined(FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR) && FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR
     config->fifo.fifoContinueOneError = true;
 #endif
-}
-
-/*!
- * brief Initializes the SAI Tx peripheral.
- *
- * deprecated Do not use this function.  It has been superceded by @ref SAI_Init
- *
- * Ungates the SAI clock, resets the module, and configures SAI Tx with a configuration structure.
- * The configuration structure can be custom filled or set with default values by
- * SAI_TxGetDefaultConfig().
- *
- * note  This API should be called at the beginning of the application to use
- * the SAI driver. Otherwise, accessing the SAIM module can cause a hard fault
- * because the clock is not enabled.
- *
- * param base SAI base pointer
- * param config SAI configuration structure.
- */
-void SAI_TxInit(I2S_Type *base, const sai_config_t *config)
-{
-    uint32_t val = 0;
-
-#if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
-    /* Enable the SAI clock */
-    CLOCK_EnableClock(s_saiClock[SAI_GetInstance(base)]);
-#endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
-
-#if defined(FSL_FEATURE_SAI_HAS_MCR) && (FSL_FEATURE_SAI_HAS_MCR)
-#if !(defined(FSL_FEATURE_SAI_HAS_NO_MCR_MICS) && (FSL_FEATURE_SAI_HAS_NO_MCR_MICS))
-    /* Master clock source setting */
-    val       = (base->MCR & ~I2S_MCR_MICS_MASK);
-    base->MCR = (val | I2S_MCR_MICS(config->mclkSource));
-#endif
-
-    /* Configure Master clock output enable */
-    val       = (base->MCR & ~I2S_MCR_MOE_MASK);
-    base->MCR = (val | I2S_MCR_MOE(config->mclkOutputEnable));
-#endif /* FSL_FEATURE_SAI_HAS_MCR */
-
-    SAI_TxReset(base);
-
-    /* Configure audio protocol */
-    switch (config->protocol)
-    {
-        case kSAI_BusLeftJustified:
-            base->TCR2 |= I2S_TCR2_BCP_MASK;
-            base->TCR3 &= ~I2S_TCR3_WDFL_MASK;
-            base->TCR4 = I2S_TCR4_MF(1U) | I2S_TCR4_SYWD(31U) | I2S_TCR4_FSE(0U) | I2S_TCR4_FSP(0U) | I2S_TCR4_FRSZ(1U);
-            break;
-
-        case kSAI_BusRightJustified:
-            base->TCR2 |= I2S_TCR2_BCP_MASK;
-            base->TCR3 &= ~I2S_TCR3_WDFL_MASK;
-            base->TCR4 = I2S_TCR4_MF(1U) | I2S_TCR4_SYWD(31U) | I2S_TCR4_FSE(0U) | I2S_TCR4_FSP(0U) | I2S_TCR4_FRSZ(1U);
-            break;
-
-        case kSAI_BusI2S:
-            base->TCR2 |= I2S_TCR2_BCP_MASK;
-            base->TCR3 &= ~I2S_TCR3_WDFL_MASK;
-            base->TCR4 = I2S_TCR4_MF(1U) | I2S_TCR4_SYWD(31U) | I2S_TCR4_FSE(1U) | I2S_TCR4_FSP(1U) | I2S_TCR4_FRSZ(1U);
-            break;
-
-        case kSAI_BusPCMA:
-            base->TCR2 &= ~I2S_TCR2_BCP_MASK;
-            base->TCR3 &= ~I2S_TCR3_WDFL_MASK;
-            base->TCR4 = I2S_TCR4_MF(1U) | I2S_TCR4_SYWD(0U) | I2S_TCR4_FSE(1U) | I2S_TCR4_FSP(0U) | I2S_TCR4_FRSZ(1U);
-            break;
-
-        case kSAI_BusPCMB:
-            base->TCR2 &= ~I2S_TCR2_BCP_MASK;
-            base->TCR3 &= ~I2S_TCR3_WDFL_MASK;
-            base->TCR4 = I2S_TCR4_MF(1U) | I2S_TCR4_SYWD(0U) | I2S_TCR4_FSE(0U) | I2S_TCR4_FSP(0U) | I2S_TCR4_FRSZ(1U);
-            break;
-
-        default:
-            break;
-    }
-
-    /* Set master or slave */
-    if (config->masterSlave == kSAI_Master)
-    {
-        base->TCR2 |= I2S_TCR2_BCD_MASK;
-        base->TCR4 |= I2S_TCR4_FSD_MASK;
-
-        /* Bit clock source setting */
-        val        = base->TCR2 & (~I2S_TCR2_MSEL_MASK);
-        base->TCR2 = (val | I2S_TCR2_MSEL(config->bclkSource));
-    }
-    else
-    {
-        base->TCR2 &= ~I2S_TCR2_BCD_MASK;
-        base->TCR4 &= ~I2S_TCR4_FSD_MASK;
-    }
-
-    /* Set Sync mode */
-    switch (config->syncMode)
-    {
-        case kSAI_ModeAsync:
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(0U));
-            break;
-        case kSAI_ModeSync:
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(1U));
-            /* If sync with Rx, should set Rx to async mode */
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(0U));
-            break;
-#if defined(FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI) && (FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI)
-        case kSAI_ModeSyncWithOtherTx:
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(2U));
-            break;
-        case kSAI_ModeSyncWithOtherRx:
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(3U));
-            break;
-#endif /* FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI */
-        default:
-            break;
-    }
-
-#if defined(FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR) && FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR
-    SAI_TxSetFIFOErrorContinue(base, true);
-#endif /* FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR */
-}
-
-/*!
- * brief Initializes the SAI Rx peripheral.
- *
- * deprecated Do not use this function.  It has been superceded by @ref SAI_Init
- *
- * Ungates the SAI clock, resets the module, and configures the SAI Rx with a configuration structure.
- * The configuration structure can be custom filled or set with default values by
- * SAI_RxGetDefaultConfig().
- *
- * note  This API should be called at the beginning of the application to use
- * the SAI driver. Otherwise, accessing the SAI module can cause a hard fault
- * because the clock is not enabled.
- *
- * param base SAI base pointer
- * param config SAI configuration structure.
- */
-void SAI_RxInit(I2S_Type *base, const sai_config_t *config)
-{
-    uint32_t val = 0;
-
-#if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
-    /* Enable SAI clock first. */
-    CLOCK_EnableClock(s_saiClock[SAI_GetInstance(base)]);
-#endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
-
-#if defined(FSL_FEATURE_SAI_HAS_MCR) && (FSL_FEATURE_SAI_HAS_MCR)
-#if !(defined(FSL_FEATURE_SAI_HAS_NO_MCR_MICS) && (FSL_FEATURE_SAI_HAS_NO_MCR_MICS))
-    /* Master clock source setting */
-    val       = (base->MCR & ~I2S_MCR_MICS_MASK);
-    base->MCR = (val | I2S_MCR_MICS(config->mclkSource));
-#endif
-
-    /* Configure Master clock output enable */
-    val       = (base->MCR & ~I2S_MCR_MOE_MASK);
-    base->MCR = (val | I2S_MCR_MOE(config->mclkOutputEnable));
-#endif /* FSL_FEATURE_SAI_HAS_MCR */
-
-    SAI_RxReset(base);
-
-    /* Configure audio protocol */
-    switch (config->protocol)
-    {
-        case kSAI_BusLeftJustified:
-            base->RCR2 |= I2S_RCR2_BCP_MASK;
-            base->RCR3 &= ~I2S_RCR3_WDFL_MASK;
-            base->RCR4 = I2S_RCR4_MF(1U) | I2S_RCR4_SYWD(31U) | I2S_RCR4_FSE(0U) | I2S_RCR4_FSP(0U) | I2S_RCR4_FRSZ(1U);
-            break;
-
-        case kSAI_BusRightJustified:
-            base->RCR2 |= I2S_RCR2_BCP_MASK;
-            base->RCR3 &= ~I2S_RCR3_WDFL_MASK;
-            base->RCR4 = I2S_RCR4_MF(1U) | I2S_RCR4_SYWD(31U) | I2S_RCR4_FSE(0U) | I2S_RCR4_FSP(0U) | I2S_RCR4_FRSZ(1U);
-            break;
-
-        case kSAI_BusI2S:
-            base->RCR2 |= I2S_RCR2_BCP_MASK;
-            base->RCR3 &= ~I2S_RCR3_WDFL_MASK;
-            base->RCR4 = I2S_RCR4_MF(1U) | I2S_RCR4_SYWD(31U) | I2S_RCR4_FSE(1U) | I2S_RCR4_FSP(1U) | I2S_RCR4_FRSZ(1U);
-            break;
-
-        case kSAI_BusPCMA:
-            base->RCR2 &= ~I2S_RCR2_BCP_MASK;
-            base->RCR3 &= ~I2S_RCR3_WDFL_MASK;
-            base->RCR4 = I2S_RCR4_MF(1U) | I2S_RCR4_SYWD(0U) | I2S_RCR4_FSE(1U) | I2S_RCR4_FSP(0U) | I2S_RCR4_FRSZ(1U);
-            break;
-
-        case kSAI_BusPCMB:
-            base->RCR2 &= ~I2S_RCR2_BCP_MASK;
-            base->RCR3 &= ~I2S_RCR3_WDFL_MASK;
-            base->RCR4 = I2S_RCR4_MF(1U) | I2S_RCR4_SYWD(0U) | I2S_RCR4_FSE(0U) | I2S_RCR4_FSP(0U) | I2S_RCR4_FRSZ(1U);
-            break;
-
-        default:
-            break;
-    }
-
-    /* Set master or slave */
-    if (config->masterSlave == kSAI_Master)
-    {
-        base->RCR2 |= I2S_RCR2_BCD_MASK;
-        base->RCR4 |= I2S_RCR4_FSD_MASK;
-
-        /* Bit clock source setting */
-        val        = base->RCR2 & (~I2S_RCR2_MSEL_MASK);
-        base->RCR2 = (val | I2S_RCR2_MSEL(config->bclkSource));
-    }
-    else
-    {
-        base->RCR2 &= ~I2S_RCR2_BCD_MASK;
-        base->RCR4 &= ~I2S_RCR4_FSD_MASK;
-    }
-
-    /* Set Sync mode */
-    switch (config->syncMode)
-    {
-        case kSAI_ModeAsync:
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(0U));
-            break;
-        case kSAI_ModeSync:
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(1U));
-            /* If sync with Tx, should set Tx to async mode */
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(0U));
-            break;
-#if defined(FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI) && (FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI)
-        case kSAI_ModeSyncWithOtherTx:
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(2U));
-            break;
-        case kSAI_ModeSyncWithOtherRx:
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(3U));
-            break;
-#endif /* FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI */
-        default:
-            break;
-    }
-
-#if defined(FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR) && FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR
-    SAI_RxSetFIFOErrorContinue(base, true);
-#endif /* FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR */
 }
 
 /*!
@@ -612,8 +421,24 @@ void SAI_Init(I2S_Type *base)
 {
 #if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
     /* Enable the SAI clock */
-    CLOCK_EnableClock(s_saiClock[SAI_GetInstance(base)]);
+    (void)CLOCK_EnableClock(s_saiClock[SAI_GetInstance(base)]);
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
+
+#if defined(SAI_RESETS_ARRAY)
+    RESET_ReleasePeripheralReset(s_saiReset[SAI_GetInstance(base)]);
+#endif
+
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    /* disable interrupt and DMA request*/
+    base->TCSR &=
+        ~(I2S_TCSR_FRIE_MASK | I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK | I2S_TCSR_FRDE_MASK | I2S_TCSR_FWDE_MASK);
+    base->RCSR &=
+        ~(I2S_RCSR_FRIE_MASK | I2S_RCSR_FWIE_MASK | I2S_RCSR_FEIE_MASK | I2S_RCSR_FRDE_MASK | I2S_RCSR_FWDE_MASK);
+#else
+    /* disable interrupt and DMA request*/
+    base->TCSR &= ~(I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK | I2S_TCSR_FWDE_MASK);
+    base->RCSR &= ~(I2S_RCSR_FWIE_MASK | I2S_RCSR_FEIE_MASK | I2S_RCSR_FWDE_MASK);
+#endif
 }
 
 /*!
@@ -629,76 +454,8 @@ void SAI_Deinit(I2S_Type *base)
     SAI_TxEnable(base, false);
     SAI_RxEnable(base, false);
 #if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
-    CLOCK_DisableClock(s_saiClock[SAI_GetInstance(base)]);
+    (void)CLOCK_DisableClock(s_saiClock[SAI_GetInstance(base)]);
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
-}
-
-/*!
- * brief  Sets the SAI Tx configuration structure to default values.
- *
- * deprecated Do not use this function.  It has been superceded by @ref
- * SAI_GetClassicI2SConfig/SAI_GetLeftJustifiedConfig/SAI_GetRightJustifiedConfig/SAI_GetDSPConfig/SAI_GetTDMConfig
- *
- * This API initializes the configuration structure for use in SAI_TxConfig().
- * The initialized structure can remain unchanged in SAI_TxConfig(), or it can be modified
- *  before calling SAI_TxConfig().
- * This is an example.
-   code
-   sai_config_t config;
-   SAI_TxGetDefaultConfig(&config);
-   endcode
- *
- * param config pointer to master configuration structure
- */
-void SAI_TxGetDefaultConfig(sai_config_t *config)
-{
-    /* Initializes the configure structure to zero. */
-    memset(config, 0, sizeof(*config));
-
-    config->bclkSource  = kSAI_BclkSourceMclkDiv;
-    config->masterSlave = kSAI_Master;
-#if defined(FSL_FEATURE_SAI_HAS_MCR) && (FSL_FEATURE_SAI_HAS_MCR)
-    config->mclkOutputEnable = true;
-#if !(defined(FSL_FEATURE_SAI_HAS_NO_MCR_MICS) && (FSL_FEATURE_SAI_HAS_NO_MCR_MICS))
-    config->mclkSource = kSAI_MclkSourceSysclk;
-#endif
-#endif /* FSL_FEATURE_SAI_HAS_MCR */
-    config->protocol = kSAI_BusI2S;
-    config->syncMode = kSAI_ModeAsync;
-}
-
-/*!
- * brief  Sets the SAI Rx configuration structure to default values.
- *
- * deprecated Do not use this function.  It has been superceded by @ref
- * SAI_GetClassicI2SConfig/SAI_GetLeftJustifiedConfig/SAI_GetRightJustifiedConfig/SAI_GetDSPConfig/SAI_GetTDMConfig
- *
- * This API initializes the configuration structure for use in SAI_RxConfig().
- * The initialized structure can remain unchanged in SAI_RxConfig() or it can be modified
- *  before calling SAI_RxConfig().
- * This is an example.
-   code
-   sai_config_t config;
-   SAI_RxGetDefaultConfig(&config);
-   endcode
- *
- * param config pointer to master configuration structure
- */
-void SAI_RxGetDefaultConfig(sai_config_t *config)
-{
-    /* Initializes the configure structure to zero. */
-    memset(config, 0, sizeof(*config));
-
-    config->bclkSource  = kSAI_BclkSourceMclkDiv;
-    config->masterSlave = kSAI_Master;
-#if defined(FSL_FEATURE_SAI_HAS_MCR) && (FSL_FEATURE_SAI_HAS_MCR)
-    config->mclkOutputEnable = true;
-#if !(defined(FSL_FEATURE_SAI_HAS_NO_MCR_MICS) && (FSL_FEATURE_SAI_HAS_NO_MCR_MICS))
-    config->mclkSource = kSAI_MclkSourceSysclk;
-#endif
-#endif /* FSL_FEATURE_SAI_HAS_MCR */
-    config->protocol = kSAI_BusI2S;
-    config->syncMode = kSAI_ModeSync;
 }
 
 /*!
@@ -760,18 +517,25 @@ void SAI_TxEnable(I2S_Type *base, bool enable)
         /* If clock is sync with Rx, should enable RE bit. */
         if (((base->TCR2 & I2S_TCR2_SYNC_MASK) >> I2S_TCR2_SYNC_SHIFT) == 0x1U)
         {
+            base->RCSR = ((base->RCSR & 0xFFE3FFFFU) | I2S_RCSR_BCE_MASK);
             base->RCSR = ((base->RCSR & 0xFFE3FFFFU) | I2S_RCSR_RE_MASK);
         }
+        /* Sometimes, bit clock starts just 3 clocks before frame synchronization
+         * signal, which cause the 1st frame sync is ignored by the RX side as
+         * described in RT1170 RM 58.3.3. To make bit clock at least 4 clocks earlier,
+         * here, we enable bit clock firstly.
+        */
+        base->TCSR = ((base->TCSR & 0xFFE3FFFFU) | I2S_TCSR_BCE_MASK);
         base->TCSR = ((base->TCSR & 0xFFE3FFFFU) | I2S_TCSR_TE_MASK);
         /* Also need to clear the FIFO error flag before start */
         SAI_TxClearStatusFlags(base, kSAI_FIFOErrorFlag);
     }
     else
     {
-        /* If RE not sync with TE, than disable TE, otherwise, shall not disable TE */
+        /* If Rx not in sync with Tx, then disable Tx, otherwise, shall not disable Tx */
         if (((base->RCR2 & I2S_RCR2_SYNC_MASK) >> I2S_RCR2_SYNC_SHIFT) != 0x1U)
         {
-            /* Should not close RE even sync with Rx */
+            /* Disable TE bit */
             base->TCSR = ((base->TCSR & 0xFFE3FFFFU) & (~I2S_TCSR_TE_MASK));
         }
     }
@@ -790,17 +554,25 @@ void SAI_RxEnable(I2S_Type *base, bool enable)
         /* If clock is sync with Tx, should enable TE bit. */
         if (((base->RCR2 & I2S_RCR2_SYNC_MASK) >> I2S_RCR2_SYNC_SHIFT) == 0x1U)
         {
+            base->TCSR = ((base->TCSR & 0xFFE3FFFFU) | I2S_TCSR_BCE_MASK);
             base->TCSR = ((base->TCSR & 0xFFE3FFFFU) | I2S_TCSR_TE_MASK);
         }
+        /* Sometimes, bit clock starts just 3 clocks before frame synchronization
+         * signal, which cause the 1st frame sync is ignored by the RX side as
+         * described in RT1170 RM 58.3.3. To make bit clock at least 4 clocks earlier,
+         * here, we enable bit clock firstly.
+        */
+        base->RCSR = ((base->RCSR & 0xFFE3FFFFU) | I2S_RCSR_BCE_MASK);
         base->RCSR = ((base->RCSR & 0xFFE3FFFFU) | I2S_RCSR_RE_MASK);
         /* Also need to clear the FIFO error flag before start */
         SAI_RxClearStatusFlags(base, kSAI_FIFOErrorFlag);
     }
     else
     {
-        /* While TX is not sync with RX, close RX */
+        /* If Tx not in sync with Rx, then disable Rx, otherwise, shall not disable Rx */
         if (((base->TCR2 & I2S_TCR2_SYNC_MASK) >> I2S_TCR2_SYNC_SHIFT) != 0x1U)
         {
+            /* Disable RE bit */
             base->RCSR = ((base->RCSR & 0xFFE3FFFFU) & (~I2S_RCSR_RE_MASK));
         }
     }
@@ -815,11 +587,11 @@ void SAI_RxEnable(I2S_Type *base, bool enable)
  * This function will also clear all the error flags such as FIFO error, sync error etc.
  *
  * param base SAI base pointer
- * param type Reset type, FIFO reset or software reset
+ * param resetType Reset type, FIFO reset or software reset
  */
-void SAI_TxSoftwareReset(I2S_Type *base, sai_reset_type_t type)
+void SAI_TxSoftwareReset(I2S_Type *base, sai_reset_type_t resetType)
 {
-    base->TCSR |= (uint32_t)type;
+    base->TCSR |= (uint32_t)resetType;
 
     /* Clear the software reset */
     base->TCSR &= ~I2S_TCSR_SR_MASK;
@@ -834,11 +606,11 @@ void SAI_TxSoftwareReset(I2S_Type *base, sai_reset_type_t type)
  * This function will also clear all the error flags such as FIFO error, sync error etc.
  *
  * param base SAI base pointer
- * param type Reset type, FIFO reset or software reset
+ * param resetType Reset type, FIFO reset or software reset
  */
-void SAI_RxSoftwareReset(I2S_Type *base, sai_reset_type_t type)
+void SAI_RxSoftwareReset(I2S_Type *base, sai_reset_type_t resetType)
 {
-    base->RCSR |= (uint32_t)type;
+    base->RCSR |= (uint32_t)resetType;
 
     /* Clear the software reset */
     base->RCSR &= ~I2S_RCSR_SR_MASK;
@@ -1000,7 +772,28 @@ void SAI_TxSetBitClockRate(
 {
     uint32_t tcr2         = base->TCR2;
     uint32_t bitClockDiv  = 0;
-    uint32_t bitClockFreq = sampleRate * bitWidth * channelNumbers;
+    uint32_t bitsPerFrame = 0;
+    uint32_t bitClockFreq = 0;
+
+    // Check for multiplication overflow before calculating bitClockFreq
+    if ((channelNumbers == 0) || (bitWidth > (UINT32_MAX / channelNumbers)))
+    {
+        // Handle error case since this is invalid configuration
+        assert(false);
+        return;
+    }
+
+    bitsPerFrame = bitWidth * channelNumbers;
+
+    // Now check second multiplication with sampleRate
+    if (sampleRate > (UINT32_MAX / bitsPerFrame))
+    {
+        // Handle error case since this is invalid configuration
+        assert(false);
+        return;
+    }
+
+    bitClockFreq = sampleRate * bitsPerFrame;
 
     assert(sourceClockHz >= bitClockFreq);
 
@@ -1023,11 +816,18 @@ void SAI_TxSetBitClockRate(
     if (bitClockDiv == 1U)
     {
         tcr2 |= I2S_TCR2_BYP_MASK;
+/* ERR051421 workaround: Set BCI bit when sync mode and bypass is used */
+#if defined(FSL_FEATURE_SAI_HAS_ERRATA_051421) && (FSL_FEATURE_SAI_HAS_ERRATA_051421)
+        if (base->RCR2 & I2S_RCR2_SYNC_MASK)
+        {
+            base->RCR2 |= I2S_RCR2_BCI(1U);
+        }
+#endif
     }
     else
 #endif
     {
-        tcr2 |= I2S_TCR2_DIV(bitClockDiv / 2U - 1U);
+        tcr2 |= I2S_TCR2_DIV(bitClockDiv / 2U - 1UL);
     }
 
     base->TCR2 = tcr2;
@@ -1047,7 +847,28 @@ void SAI_RxSetBitClockRate(
 {
     uint32_t rcr2         = base->RCR2;
     uint32_t bitClockDiv  = 0;
-    uint32_t bitClockFreq = sampleRate * bitWidth * channelNumbers;
+    uint32_t bitsPerFrame = 0;
+    uint32_t bitClockFreq = 0;
+
+    // Check for multiplication overflow before calculating bitClockFreq
+    if ((channelNumbers == 0) || (bitWidth > (UINT32_MAX / channelNumbers)))
+    {
+        // Handle error case since this is invalid configuration
+        assert(false);
+        return;
+    }
+
+    bitsPerFrame = bitWidth * channelNumbers;
+
+    // Now check second multiplication with sampleRate
+    if (sampleRate > (UINT32_MAX / bitsPerFrame))
+    {
+        // Handle error case since this is invalid configuration
+        assert(false);
+        return;
+    }
+
+    bitClockFreq = sampleRate * bitsPerFrame;
 
     assert(sourceClockHz >= bitClockFreq);
 
@@ -1070,11 +891,18 @@ void SAI_RxSetBitClockRate(
     if (bitClockDiv == 1U)
     {
         rcr2 |= I2S_RCR2_BYP_MASK;
+/* ERR051421 workaround: Set BCI bit when sync mode and bypass is used */
+#if defined(FSL_FEATURE_SAI_HAS_ERRATA_051421) && (FSL_FEATURE_SAI_HAS_ERRATA_051421)
+        if (base->TCR2 & I2S_TCR2_SYNC_MASK)
+        {
+            base->TCR2 |= I2S_TCR2_BCI(1U);
+        }
+#endif
     }
     else
 #endif
     {
-        rcr2 |= I2S_RCR2_DIV(bitClockDiv / 2U - 1U);
+        rcr2 |= I2S_RCR2_DIV(bitClockDiv / 2U - 1UL);
     }
 
     base->RCR2 = rcr2;
@@ -1095,14 +923,31 @@ void SAI_TxSetBitclockConfig(I2S_Type *base, sai_master_slave_t masterSlave, sai
     {
         assert(config != NULL);
 
-        tcr2 &= ~(I2S_TCR2_BCD_MASK | I2S_TCR2_BCP_MASK | I2S_TCR2_BCI_MASK | I2S_TCR2_BCS_MASK | I2S_TCR2_MSEL_MASK);
-        tcr2 |= I2S_TCR2_BCD(1U) | I2S_TCR2_BCP(config->bclkPolarity) | I2S_TCR2_BCI(config->bclkInputDelay) |
-                I2S_TCR2_BCS(config->bclkSrcSwap) | I2S_TCR2_MSEL(config->bclkSource);
+        tcr2 &= ~(I2S_TCR2_BCD_MASK | I2S_TCR2_BCP_MASK | I2S_TCR2_BCI_MASK |
+#if defined(FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP) && FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP
+            I2S_TCR2_BCS_MASK |
+#endif
+            I2S_TCR2_MSEL_MASK);
+        tcr2 |= I2S_TCR2_BCD(1U) | I2S_TCR2_BCP(config->bclkPolarity) | I2S_TCR2_BCI(config->bclkInputDelay ? 1U : 0U) |
+#if defined(FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP) && FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP
+                I2S_TCR2_BCS(config->bclkSrcSwap ? 1U : 0U) |
+#endif
+                I2S_TCR2_MSEL(config->bclkSource);
     }
     else
     {
-        tcr2 &= ~(I2S_TCR2_BCD_MASK);
+        /* Clear BCP bit before set it. */
+        tcr2 &= ~(I2S_TCR2_BCD_MASK | I2S_TCR2_BCP_MASK);
+        tcr2 |= I2S_TCR2_BCP(config->bclkPolarity);
     }
+
+/* ERR051421 workaround: Set BCI bit when sync mode and bypass is used */
+#if defined(FSL_FEATURE_SAI_HAS_ERRATA_051421) && (FSL_FEATURE_SAI_HAS_ERRATA_051421)
+    if ((base->RCR2 & I2S_RCR2_BYP_MASK) && (base->TCR2 & I2S_TCR2_SYNC_MASK))
+    {
+        tcr2 |= I2S_TCR2_BCI(1U);
+    }
+#endif
 
     base->TCR2 = tcr2;
 }
@@ -1122,14 +967,31 @@ void SAI_RxSetBitclockConfig(I2S_Type *base, sai_master_slave_t masterSlave, sai
     {
         assert(config != NULL);
 
-        rcr2 &= ~(I2S_RCR2_BCD_MASK | I2S_RCR2_BCP_MASK | I2S_RCR2_BCI_MASK | I2S_RCR2_BCS_MASK | I2S_RCR2_MSEL_MASK);
-        rcr2 |= I2S_RCR2_BCD(1U) | I2S_RCR2_BCP(config->bclkPolarity) | I2S_RCR2_BCI(config->bclkInputDelay) |
-                I2S_RCR2_BCS(config->bclkSrcSwap) | I2S_RCR2_MSEL(config->bclkSource);
+        rcr2 &= ~(I2S_RCR2_BCD_MASK | I2S_RCR2_BCP_MASK | I2S_RCR2_BCI_MASK |
+#if defined(FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP) && FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP
+            I2S_RCR2_BCS_MASK |
+#endif
+            I2S_RCR2_MSEL_MASK);
+        rcr2 |= I2S_RCR2_BCD(1U) | I2S_RCR2_BCP(config->bclkPolarity) | I2S_RCR2_BCI(config->bclkInputDelay ? 1U : 0U) |
+#if defined(FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP) && FSL_FEATURE_SAI_HAS_BIT_CLOCK_SWAP
+                I2S_RCR2_BCS(config->bclkSrcSwap ? 1U : 0U) |
+#endif
+                I2S_RCR2_MSEL(config->bclkSource);
     }
     else
     {
-        rcr2 &= ~(I2S_RCR2_BCD_MASK);
+        /* Clear BCP bit before set it. */
+        rcr2 &= ~(I2S_RCR2_BCD_MASK | I2S_RCR2_BCP_MASK);
+        rcr2 |= I2S_RCR2_BCP(config->bclkPolarity);
     }
+
+/* ERR051421 workaround: Set BCI bit when sync mode and bypass is used */
+#if defined(FSL_FEATURE_SAI_HAS_ERRATA_051421) && (FSL_FEATURE_SAI_HAS_ERRATA_051421)
+    if ((base->TCR2 & I2S_TCR2_BYP_MASK) && (base->RCR2 & I2S_RCR2_SYNC_MASK))
+    {
+        rcr2 |= I2S_RCR2_BCI(1U);
+    }
+#endif
 
     base->RCR2 = rcr2;
 }
@@ -1156,7 +1018,8 @@ void SAI_SetMasterClockConfig(I2S_Type *base, sai_master_clock_t *config)
 
     /* Configure Master clock output enable */
     val       = (base->MCR & ~I2S_MCR_MOE_MASK);
-    base->MCR = (val | I2S_MCR_MOE(config->mclkOutputEnable));
+    base->MCR = (val | I2S_MCR_MOE(config->mclkOutputEnable ? 1U : 0U));
+
 #endif /* FSL_FEATURE_SAI_HAS_MCR */
 
 #if ((defined(FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER) && (FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER)) || \
@@ -1170,6 +1033,7 @@ void SAI_SetMasterClockConfig(I2S_Type *base, sai_master_clock_t *config)
 }
 #endif
 
+#if FSL_SAI_HAS_FIFO_EXTEND_FEATURE
 /*!
  * brief SAI transmitter fifo configurations.
  *
@@ -1179,13 +1043,17 @@ void SAI_SetMasterClockConfig(I2S_Type *base, sai_master_clock_t *config)
 void SAI_TxSetFifoConfig(I2S_Type *base, sai_fifo_t *config)
 {
     assert(config != NULL);
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    assert(config->fifoWatermark <= (I2S_TCR1_TFW_MASK >> I2S_TCR1_TFW_SHIFT));
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if (config->fifoWatermark > (uint8_t)((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base)) ||
+	(!MCUX_SDK_SAI_ALLOW_NULL_FIFO_WATERMARK && config->fifoWatermark == 0U))
+    {
+        config->fifoWatermark = (uint8_t)((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base) / 2U);
+    }
 #endif
 
     uint32_t tcr4 = base->TCR4;
 
-#if defined(FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_COMBINE) && FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_COMBINE
+#if defined(FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE) && FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE
     tcr4 &= ~I2S_TCR4_FCOMB_MASK;
     tcr4 |= I2S_TCR4_FCOMB(config->fifoCombine);
 #endif
@@ -1196,7 +1064,7 @@ void SAI_TxSetFifoConfig(I2S_Type *base, sai_fifo_t *config)
      * not work */
     if (base->TMR == 0U)
     {
-        tcr4 |= I2S_TCR4_FCONT(config->fifoContinueOneError);
+        tcr4 |= I2S_TCR4_FCONT(config->fifoContinueOneError ? 1UL : 0UL);
     }
 #endif
 
@@ -1207,7 +1075,7 @@ void SAI_TxSetFifoConfig(I2S_Type *base, sai_fifo_t *config)
 
     base->TCR4 = tcr4;
 
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
     base->TCR1 = (base->TCR1 & (~I2S_TCR1_TFW_MASK)) | I2S_TCR1_TFW(config->fifoWatermark);
 #endif
 }
@@ -1221,19 +1089,23 @@ void SAI_TxSetFifoConfig(I2S_Type *base, sai_fifo_t *config)
 void SAI_RxSetFifoConfig(I2S_Type *base, sai_fifo_t *config)
 {
     assert(config != NULL);
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    assert(config->fifoWatermark <= (I2S_TCR1_TFW_MASK >> I2S_TCR1_TFW_SHIFT));
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if (config->fifoWatermark > (uint8_t)((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base)) ||
+	(!MCUX_SDK_SAI_ALLOW_NULL_FIFO_WATERMARK && config->fifoWatermark == 0U))
+    {
+        config->fifoWatermark = (uint8_t)((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base) / 2U);
+    }
 #endif
     uint32_t rcr4 = base->RCR4;
 
-#if defined(FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_COMBINE) && FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_COMBINE
+#if defined(FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE) && FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE
     rcr4 &= ~I2S_RCR4_FCOMB_MASK;
     rcr4 |= I2S_RCR4_FCOMB(config->fifoCombine);
 #endif
 
 #if defined(FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR) && FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR
     rcr4 &= ~I2S_RCR4_FCONT_MASK;
-    rcr4 |= I2S_RCR4_FCONT(config->fifoContinueOneError);
+    rcr4 |= I2S_RCR4_FCONT(config->fifoContinueOneError ? 1UL : 0UL);
 #endif
 
 #if defined(FSL_FEATURE_SAI_HAS_FIFO_PACKING) && FSL_FEATURE_SAI_HAS_FIFO_PACKING
@@ -1243,10 +1115,11 @@ void SAI_RxSetFifoConfig(I2S_Type *base, sai_fifo_t *config)
 
     base->RCR4 = rcr4;
 
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
     base->RCR1 = (base->RCR1 & (~I2S_RCR1_RFW_MASK)) | I2S_RCR1_RFW(config->fifoWatermark);
 #endif
 }
+#endif
 
 /*!
  * brief SAI transmitter Frame sync configurations.
@@ -1257,27 +1130,22 @@ void SAI_RxSetFifoConfig(I2S_Type *base, sai_fifo_t *config)
  */
 void SAI_TxSetFrameSyncConfig(I2S_Type *base, sai_master_slave_t masterSlave, sai_frame_sync_t *config)
 {
+    assert(config != NULL);
+    assert((config->frameSyncWidth - 1UL) <= (I2S_TCR4_SYWD_MASK >> I2S_TCR4_SYWD_SHIFT));
+
     uint32_t tcr4 = base->TCR4;
 
-    if ((masterSlave == kSAI_Master) || (masterSlave == kSAI_Bclk_Slave_FrameSync_Master))
-    {
-        assert(config != NULL);
-        assert((config->frameSyncWidth - 1U) <= (I2S_TCR4_SYWD_MASK >> I2S_TCR4_SYWD_SHIFT));
+    tcr4 &= ~(I2S_TCR4_FSE_MASK | I2S_TCR4_FSP_MASK | I2S_TCR4_FSD_MASK | I2S_TCR4_SYWD_MASK);
 
-        tcr4 &= ~(I2S_TCR4_FSE_MASK | I2S_TCR4_FSP_MASK | I2S_TCR4_FSD_MASK | I2S_TCR4_SYWD_MASK);
-
-#if defined(FSL_FEATURE_SAI_HAS_FRAME_SYNC_ON_DEMAND) && FSL_FEATURE_SAI_HAS_FRAME_SYNC_ON_DEMAND
-        tcr4 &= ~I2S_TCR4_ONDEM_MASK;
-        tcr4 |= I2S_TCR4_ONDEM(config->frameSyncGenerateOnDemand);
+#if defined(FSL_FEATURE_SAI_HAS_ON_DEMAND_MODE) && FSL_FEATURE_SAI_HAS_ON_DEMAND_MODE
+    tcr4 &= ~I2S_TCR4_ONDEM_MASK;
+    tcr4 |= I2S_TCR4_ONDEM(config->frameSyncGenerateOnDemand ? 1U : 0U);
 #endif
 
-        tcr4 |= I2S_TCR4_FSE(config->frameSyncEarly) | I2S_TCR4_FSP(config->frameSyncPolarity) | I2S_TCR4_FSD(1U) |
-                I2S_TCR4_SYWD(config->frameSyncWidth - 1U);
-    }
-    else
-    {
-        tcr4 &= ~I2S_TCR4_FSD_MASK;
-    }
+    tcr4 |=
+        I2S_TCR4_FSE(config->frameSyncEarly ? 1UL : 0UL) | I2S_TCR4_FSP(config->frameSyncPolarity) |
+        I2S_TCR4_FSD(((masterSlave == kSAI_Master) || (masterSlave == kSAI_Bclk_Slave_FrameSync_Master)) ? 1UL : 0U) |
+        I2S_TCR4_SYWD(config->frameSyncWidth - 1UL);
 
     base->TCR4 = tcr4;
 }
@@ -1291,27 +1159,22 @@ void SAI_TxSetFrameSyncConfig(I2S_Type *base, sai_master_slave_t masterSlave, sa
  */
 void SAI_RxSetFrameSyncConfig(I2S_Type *base, sai_master_slave_t masterSlave, sai_frame_sync_t *config)
 {
+    assert(config != NULL);
+    assert((config->frameSyncWidth - 1UL) <= (I2S_RCR4_SYWD_MASK >> I2S_RCR4_SYWD_SHIFT));
+
     uint32_t rcr4 = base->RCR4;
 
-    if ((masterSlave == kSAI_Master) || (masterSlave == kSAI_Bclk_Slave_FrameSync_Master))
-    {
-        assert(config != NULL);
-        assert((config->frameSyncWidth - 1U) <= (I2S_RCR4_SYWD_MASK >> I2S_RCR4_SYWD_SHIFT));
+    rcr4 &= ~(I2S_RCR4_FSE_MASK | I2S_RCR4_FSP_MASK | I2S_RCR4_FSD_MASK | I2S_RCR4_SYWD_MASK);
 
-        rcr4 &= ~(I2S_RCR4_FSE_MASK | I2S_RCR4_FSP_MASK | I2S_RCR4_FSD_MASK | I2S_RCR4_SYWD_MASK);
-
-#if defined(FSL_FEATURE_SAI_HAS_FRAME_SYNC_ON_DEMAND) && FSL_FEATURE_SAI_HAS_FRAME_SYNC_ON_DEMAND
-        rcr4 &= ~I2S_RCR4_ONDEM_MASK;
-        rcr4 |= I2S_RCR4_ONDEM(config->frameSyncGenerateOnDemand);
+#if defined(FSL_FEATURE_SAI_HAS_ON_DEMAND_MODE) && FSL_FEATURE_SAI_HAS_ON_DEMAND_MODE
+    rcr4 &= ~I2S_RCR4_ONDEM_MASK;
+    rcr4 |= I2S_RCR4_ONDEM(config->frameSyncGenerateOnDemand ? 1U : 0U);
 #endif
 
-        rcr4 |= I2S_RCR4_FSE(config->frameSyncEarly) | I2S_RCR4_FSP(config->frameSyncPolarity) | I2S_RCR4_FSD(1U) |
-                I2S_RCR4_SYWD(config->frameSyncWidth - 1U);
-    }
-    else
-    {
-        rcr4 &= ~I2S_RCR4_FSD_MASK;
-    }
+    rcr4 |=
+        I2S_RCR4_FSE(config->frameSyncEarly ? 1UL : 0UL) | I2S_RCR4_FSP(config->frameSyncPolarity) |
+        I2S_RCR4_FSD(((masterSlave == kSAI_Master) || (masterSlave == kSAI_Bclk_Slave_FrameSync_Master)) ? 1UL : 0U) |
+        I2S_RCR4_SYWD(config->frameSyncWidth - 1UL);
 
     base->RCR4 = rcr4;
 }
@@ -1328,8 +1191,8 @@ void SAI_TxSetSerialDataConfig(I2S_Type *base, sai_serial_data_t *config)
 
     uint32_t tcr4 = base->TCR4;
 
-    base->TCR5 = I2S_TCR5_WNW(config->dataWordNLength - 1U) | I2S_TCR5_W0W(config->dataWord0Length - 1U) |
-                 I2S_TCR5_FBT(config->dataFirstBitShifted - 1U);
+    base->TCR5 = I2S_TCR5_WNW(config->dataWordNLength - 1UL) | I2S_TCR5_W0W(config->dataWord0Length - 1UL) |
+                 I2S_TCR5_FBT(config->dataFirstBitShifted - 1UL);
     base->TMR = config->dataMaskedWord;
 #if defined(FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR) && FSL_FEATURE_SAI_HAS_FIFO_FUNCTION_AFTER_ERROR
     /* ERR05144: not set FCONT = 1 when TMR > 0, the transmit shift register may not load correctly that will cause TX
@@ -1340,7 +1203,7 @@ void SAI_TxSetSerialDataConfig(I2S_Type *base, sai_serial_data_t *config)
     }
 #endif
     tcr4 &= ~(I2S_TCR4_FRSZ_MASK | I2S_TCR4_MF_MASK);
-    tcr4 |= I2S_TCR4_FRSZ(config->dataWordNum - 1U) | I2S_TCR4_MF(config->dataOrder);
+    tcr4 |= I2S_TCR4_FRSZ(config->dataWordNum - 1UL) | I2S_TCR4_MF(config->dataOrder);
 
 #if defined(FSL_FEATURE_SAI_HAS_CHANNEL_MODE) && FSL_FEATURE_SAI_HAS_CHANNEL_MODE
     tcr4 &= ~I2S_TCR4_CHMOD_MASK;
@@ -1362,15 +1225,70 @@ void SAI_RxSetSerialDataConfig(I2S_Type *base, sai_serial_data_t *config)
 
     uint32_t rcr4 = base->RCR4;
 
-    base->RCR5 = I2S_RCR5_WNW(config->dataWordNLength - 1U) | I2S_RCR5_W0W(config->dataWord0Length - 1U) |
-                 I2S_RCR5_FBT(config->dataFirstBitShifted - 1U);
+    base->RCR5 = I2S_RCR5_WNW(config->dataWordNLength - 1UL) | I2S_RCR5_W0W(config->dataWord0Length - 1UL) |
+                 I2S_RCR5_FBT(config->dataFirstBitShifted - 1UL);
     base->RMR = config->dataMaskedWord;
 
     rcr4 &= ~(I2S_RCR4_FRSZ_MASK | I2S_RCR4_MF_MASK);
-    rcr4 |= I2S_RCR4_FRSZ(config->dataWordNum - 1u) | I2S_RCR4_MF(config->dataOrder);
+    rcr4 |= I2S_RCR4_FRSZ(config->dataWordNum - 1uL) | I2S_RCR4_MF(config->dataOrder);
 
     base->RCR4 = rcr4;
 }
+
+#if !MCUX_SDK_SAI_DISABLE_IMPLICIT_CHAN_CONFIG
+static void SAI_ComputeChannelConfig(I2S_Type *base, sai_transceiver_t *config)
+{
+    assert(config != NULL);
+    assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) != -1);
+
+    uint8_t i           = 0U;
+    uint8_t channelNums = 0U;
+
+    /* if channel mask is not set, then format->channel must be set,
+     use it to get channel mask value */
+    if (config->channelMask == 0U)
+    {
+        if(config->startChannel < 8U)
+        {
+            config->channelMask = 1;
+            config->channelMask <<= config->startChannel;
+        }
+        else
+        {
+            config->channelMask = UINT8_MAX;
+        }
+    }
+
+    for (i = 0U; i < (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base); i++)
+    {
+        if (IS_SAI_FLAG_SET(1UL << i, config->channelMask))
+        {
+            // Prevent potential addition overflow by capping at maximum value
+            if (channelNums < UINT8_MAX)
+            {
+                channelNums++;
+            }
+            else
+            {
+                channelNums = UINT8_MAX;
+            }
+
+            config->endChannel = i;
+        }
+    }
+
+    for (i = 0U; i < (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base); i++)
+    {
+        if (IS_SAI_FLAG_SET((1UL << i), config->channelMask))
+        {
+            config->startChannel = i;
+            break;
+        }
+    }
+
+    config->channelNums = channelNums;
+}
+#endif /* MCUX_SDK_SAI_DISABLE_IMPLICIT_CHAN_CONFIG */
 
 /*!
  * brief SAI transmitter configurations.
@@ -1380,36 +1298,24 @@ void SAI_RxSetSerialDataConfig(I2S_Type *base, sai_serial_data_t *config)
  */
 void SAI_TxSetConfig(I2S_Type *base, sai_transceiver_t *config)
 {
-    assert(config != NULL);
-    assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) != -1);
+    uint32_t val = 0U;
 
-    uint32_t val = 0U, i = 0U;
-    uint32_t channelNums = 0U;
     /* reset transmitter */
     SAI_TxReset(base);
 
-    /* if channel mask is not set, then format->channel must be set,
-     use it to get channel mask value */
-    if (config->channelMask == 0U)
-    {
-        config->channelMask = 1U << config->startChannel;
-    }
+#if !MCUX_SDK_SAI_DISABLE_IMPLICIT_CHAN_CONFIG
+    /* sometimes, the user of the SAI driver may want to
+     * set the channel configuration (i.e: the startChannel,
+     * channelMask, endChannel, and channelNums fields of
+     * sai_transceiver_t) before calling SAI_TxSetConfig().
+     * As such, if the user wants to do this, they can define
+     * FSL_FEATURE_SAI_DISABLE_IMPLICIT_CHAN_CONFIG which will
+     * stop SAI_TxSetConfig() from implicitly computing those
+     * values.
+     */
+    SAI_ComputeChannelConfig(base, config);
+#endif /* MCUX_SDK_SAI_DISABLE_IMPLICIT_CHAN_CONFIG */
 
-    for (i = 0U; i < (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base); i++)
-    {
-        if (((uint32_t)1 << i) & config->channelMask)
-        {
-            /* get start channel number when channelNums = 0 only */
-            if (channelNums == 0U)
-            {
-                config->startChannel = i;
-            }
-            channelNums++;
-            config->endChannel = i;
-        }
-    }
-    assert(channelNums <= (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
-    config->channelNums = channelNums;
 #if defined(FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE) && (FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE)
     /* make sure combine mode disabled while multipe channel is used */
     if (config->channelNums > 1U)
@@ -1422,38 +1328,36 @@ void SAI_TxSetConfig(I2S_Type *base, sai_transceiver_t *config)
     base->TCR3 &= ~I2S_TCR3_TCE_MASK;
     base->TCR3 |= I2S_TCR3_TCE(config->channelMask);
 
-    /* Set Sync mode */
-    switch (config->syncMode)
+    if (config->syncMode == kSAI_ModeAsync)
     {
-        case kSAI_ModeAsync:
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(0U));
-            break;
-        case kSAI_ModeSync:
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(1U));
-            /* If sync with Rx, should set Rx to async mode */
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(0U));
-            break;
-#if defined(FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI) && (FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI)
-        case kSAI_ModeSyncWithOtherTx:
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(2U));
-            break;
-        case kSAI_ModeSyncWithOtherRx:
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(3U));
-            break;
-#endif /* FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI */
-        default:
-            break;
+        val = base->TCR2;
+        val &= ~I2S_TCR2_SYNC_MASK;
+        base->TCR2 = (val | I2S_TCR2_SYNC(0U));
     }
+    if (config->syncMode == kSAI_ModeSync)
+    {
+        val = base->TCR2;
+        val &= ~I2S_TCR2_SYNC_MASK;
+        base->TCR2 = (val | I2S_TCR2_SYNC(1U));
+        /* If sync with Rx, should set Rx to async mode */
+        val = base->RCR2;
+        val &= ~I2S_RCR2_SYNC_MASK;
+        base->RCR2 = (val | I2S_RCR2_SYNC(0U));
+    }
+#if defined(FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI) && (FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI)
+    if (config->syncMode == kSAI_ModeSyncWithOtherTx)
+    {
+        val = base->TCR2;
+        val &= ~I2S_TCR2_SYNC_MASK;
+        base->TCR2 = (val | I2S_TCR2_SYNC(2U));
+    }
+    if (config->syncMode == kSAI_ModeSyncWithOtherRx)
+    {
+        val = base->TCR2;
+        val &= ~I2S_TCR2_SYNC_MASK;
+        base->TCR2 = (val | I2S_TCR2_SYNC(3U));
+    }
+#endif /* FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI */
 
     /* bit clock configurations */
     SAI_TxSetBitclockConfig(base, config->masterSlave, &config->bitClock);
@@ -1461,8 +1365,10 @@ void SAI_TxSetConfig(I2S_Type *base, sai_transceiver_t *config)
     SAI_TxSetSerialDataConfig(base, &config->serialData);
     /* frame sync configurations */
     SAI_TxSetFrameSyncConfig(base, config->masterSlave, &config->frameSync);
+#if FSL_SAI_HAS_FIFO_EXTEND_FEATURE
     /* fifo configurations */
     SAI_TxSetFifoConfig(base, &config->fifo);
+#endif
 }
 
 /*!
@@ -1478,9 +1384,16 @@ void SAI_TransferTxSetConfig(I2S_Type *base, sai_handle_t *handle, sai_transceiv
 {
     assert(handle != NULL);
     assert(config != NULL);
+    assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) >= 0);
+    assert(config->channelNums <= (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
 
-    handle->bitWidth = config->frameSync.frameSyncWidth;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
+    handle->bitWidth = config->serialData.dataWordNLength;
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((config->fifo.fifoWatermark == 0U) ||
+        (config->fifo.fifoWatermark > (uint8_t)((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base))))
+    {
+        config->fifo.fifoWatermark = (uint8_t)((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base) / 2U);
+    }
     handle->watermark = config->fifo.fifoWatermark;
 #endif
 
@@ -1502,37 +1415,24 @@ void SAI_TransferTxSetConfig(I2S_Type *base, sai_handle_t *handle, sai_transceiv
  */
 void SAI_RxSetConfig(I2S_Type *base, sai_transceiver_t *config)
 {
-    assert(config != NULL);
-    assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) != -1);
-
-    uint32_t val = 0U, i = 0U;
-    uint32_t channelNums = 0U;
+    uint32_t val = 0U;
 
     /* reset receiver */
     SAI_RxReset(base);
 
-    /* if channel mask is not set, then format->channel must be set,
-     use it to get channel mask value */
-    if (config->channelMask == 0U)
-    {
-        config->channelMask = 1U << config->startChannel;
-    }
+#if !MCUX_SDK_SAI_DISABLE_IMPLICIT_CHAN_CONFIG
+    /* sometimes, the user of the SAI driver may want to
+     * set the channel configuration (i.e: the startChannel,
+     * channelMask, endChannel, and channelNums fields of
+     * sai_transceiver_t) before calling SAI_RxSetConfig().
+     * As such, if the user wants to do this, they can define
+     * FSL_FEATURE_SAI_DISABLE_IMPLICIT_CHAN_CONFIG which will
+     * stop SAI_RxSetConfig() from implicitly computing those
+     * values.
+     */
+    SAI_ComputeChannelConfig(base, config);
+#endif /* MCUX_SDK_SAI_DISABLE_IMPLICIT_CHAN_CONFIG */
 
-    for (i = 0U; i < (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base); i++)
-    {
-        if (((uint32_t)1 << i) & config->channelMask)
-        {
-            /* get start channel number when channelNums = 0 only */
-            if (channelNums == 0U)
-            {
-                config->startChannel = i;
-            }
-            channelNums++;
-            config->endChannel = i;
-        }
-    }
-    assert(channelNums <= (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
-    config->channelNums = channelNums;
 #if defined(FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE) && (FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE)
     /* make sure combine mode disabled while multipe channel is used */
     if (config->channelNums > 1U)
@@ -1546,37 +1446,36 @@ void SAI_RxSetConfig(I2S_Type *base, sai_transceiver_t *config)
     base->RCR3 |= I2S_RCR3_RCE(config->channelMask);
 
     /* Set Sync mode */
-    switch (config->syncMode)
+    if (config->syncMode == kSAI_ModeAsync)
     {
-        case kSAI_ModeAsync:
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(0U));
-            break;
-        case kSAI_ModeSync:
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(1U));
-            /* If sync with Tx, should set Tx to async mode */
-            val = base->TCR2;
-            val &= ~I2S_TCR2_SYNC_MASK;
-            base->TCR2 = (val | I2S_TCR2_SYNC(0U));
-            break;
-#if defined(FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI) && (FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI)
-        case kSAI_ModeSyncWithOtherTx:
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(2U));
-            break;
-        case kSAI_ModeSyncWithOtherRx:
-            val = base->RCR2;
-            val &= ~I2S_RCR2_SYNC_MASK;
-            base->RCR2 = (val | I2S_RCR2_SYNC(3U));
-            break;
-#endif /* FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI */
-        default:
-            break;
+        val = base->RCR2;
+        val &= ~I2S_RCR2_SYNC_MASK;
+        base->RCR2 = (val | I2S_RCR2_SYNC(0U));
     }
+    if (config->syncMode == kSAI_ModeSync)
+    {
+        val = base->RCR2;
+        val &= ~I2S_RCR2_SYNC_MASK;
+        base->RCR2 = (val | I2S_RCR2_SYNC(1U));
+        /* If sync with Tx, should set Tx to async mode */
+        val = base->TCR2;
+        val &= ~I2S_TCR2_SYNC_MASK;
+        base->TCR2 = (val | I2S_TCR2_SYNC(0U));
+    }
+#if defined(FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI) && (FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI)
+    if (config->syncMode == kSAI_ModeSyncWithOtherTx)
+    {
+        val = base->RCR2;
+        val &= ~I2S_RCR2_SYNC_MASK;
+        base->RCR2 = (val | I2S_RCR2_SYNC(2U));
+    }
+    if (config->syncMode == kSAI_ModeSyncWithOtherRx)
+    {
+        val = base->RCR2;
+        val &= ~I2S_RCR2_SYNC_MASK;
+        base->RCR2 = (val | I2S_RCR2_SYNC(3U));
+    }
+#endif /* FSL_FEATURE_SAI_HAS_SYNC_WITH_ANOTHER_SAI */
 
     /* bit clock configurations */
     SAI_RxSetBitclockConfig(base, config->masterSlave, &config->bitClock);
@@ -1584,8 +1483,10 @@ void SAI_RxSetConfig(I2S_Type *base, sai_transceiver_t *config)
     SAI_RxSetSerialDataConfig(base, &config->serialData);
     /* frame sync configurations */
     SAI_RxSetFrameSyncConfig(base, config->masterSlave, &config->frameSync);
+#if FSL_SAI_HAS_FIFO_EXTEND_FEATURE
     /* fifo configurations */
     SAI_RxSetFifoConfig(base, &config->fifo);
+#endif
 }
 
 /*!
@@ -1602,8 +1503,13 @@ void SAI_TransferRxSetConfig(I2S_Type *base, sai_handle_t *handle, sai_transceiv
     assert(handle != NULL);
     assert(config != NULL);
 
-    handle->bitWidth = config->frameSync.frameSyncWidth;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
+    handle->bitWidth = config->serialData.dataWordNLength;
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((config->fifo.fifoWatermark == 0U) ||
+        (config->fifo.fifoWatermark > (uint8_t)((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base))))
+    {
+        config->fifo.fifoWatermark = (uint8_t)((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base) / 2U);
+    }
     handle->watermark = config->fifo.fifoWatermark;
 #endif
 
@@ -1680,10 +1586,25 @@ void SAI_GetRightJustifiedConfig(sai_transceiver_t *config,
 /*!
  * brief Get DSP mode configurations.
  *
+ * note DSP mode is also called PCM mode which support MODE A and MODE B,
+ * DSP/PCM MODE A configuration flow. RX is similiar but uses SAI_RxSetConfig instead of SAI_TxSetConfig:
+ * code
+ * SAI_GetDSPConfig(config, kSAI_FrameSyncLenOneBitClk, bitWidth, kSAI_Stereo, channelMask)
+ * config->frameSync.frameSyncEarly    = true;
+ * SAI_TxSetConfig(base, config)
+ * endcode
+ *
+ * DSP/PCM MODE B configuration flow for TX. RX is similiar but uses SAI_RxSetConfig instead of SAI_TxSetConfig:
+ * code
+ * SAI_GetDSPConfig(config, kSAI_FrameSyncLenOneBitClk, bitWidth, kSAI_Stereo, channelMask)
+ * SAI_TxSetConfig(base, config)
+ * endcode
+ *
  * param config transceiver configurations.
+ * param frameSyncWidth length of frame sync.
  * param bitWidth audio data bitWidth.
  * param mode audio data channel.
- * param saiChannelMask channel mask value to enable.
+ * param saiChannelMask mask value of the channel to enable.
  */
 void SAI_GetDSPConfig(sai_transceiver_t *config,
                       sai_frame_sync_len_t frameSyncWidth,
@@ -1704,6 +1625,7 @@ void SAI_GetDSPConfig(sai_transceiver_t *config,
             break;
         default:
             assert(false);
+            break;
     }
     config->frameSync.frameSyncEarly    = false;
     config->frameSync.frameSyncPolarity = kSAI_PolarityActiveHigh;
@@ -1739,290 +1661,11 @@ void SAI_GetTDMConfig(sai_transceiver_t *config,
             break;
         default:
             assert(false);
+            break;
     }
     config->frameSync.frameSyncEarly    = false;
     config->frameSync.frameSyncPolarity = kSAI_PolarityActiveHigh;
-    config->serialData.dataWordNum      = dataWordNum;
-}
-
-/*!
- * brief Configures the SAI Tx audio format.
- *
- * deprecated Do not use this function.  It has been superceded by @ref SAI_TxSetConfig
- *
- * The audio format can be changed at run-time. This function configures the sample rate and audio data
- * format to be transferred.
- *
- * param base SAI base pointer.
- * param format Pointer to the SAI audio data format structure.
- * param mclkSourceClockHz SAI master clock source frequency in Hz.
- * param bclkSourceClockHz SAI bit clock source frequency in Hz. If the bit clock source is a master
- * clock, this value should equal the masterClockHz.
- */
-void SAI_TxSetFormat(I2S_Type *base,
-                     sai_transfer_format_t *format,
-                     uint32_t mclkSourceClockHz,
-                     uint32_t bclkSourceClockHz)
-{
-    assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) != -1);
-
-    uint32_t bclk    = 0;
-    uint32_t val     = 0;
-    uint32_t i       = 0U;
-    uint32_t divider = 0U, channelNums = 0U;
-
-    if (format->isFrameSyncCompact)
-    {
-        bclk = format->sampleRate_Hz * format->bitWidth * (format->stereo == kSAI_Stereo ? 2U : 1U);
-        val  = (base->TCR4 & (~I2S_TCR4_SYWD_MASK));
-        val |= I2S_TCR4_SYWD(format->bitWidth - 1U);
-        base->TCR4 = val;
-    }
-    else
-    {
-        bclk = format->sampleRate_Hz * 32U * 2U;
-    }
-
-/* Compute the mclk */
-#if defined(FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER) && (FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER)
-    /* Check if master clock divider enabled, then set master clock divider */
-    if (base->MCR & I2S_MCR_MOE_MASK)
-    {
-        SAI_SetMasterClockDivider(base, format->masterClockHz, mclkSourceClockHz);
-    }
-#endif /* FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER */
-
-    /* Set bclk if needed */
-    if (base->TCR2 & I2S_TCR2_BCD_MASK)
-    {
-        base->TCR2 &= ~I2S_TCR2_DIV_MASK;
-        /* need to check the divided bclk, if bigger than target, then divider need to re-calculate. */
-        divider = bclkSourceClockHz / bclk;
-        /* for the condition where the source clock is smaller than target bclk */
-        if (divider == 0U)
-        {
-            divider++;
-        }
-        /* recheck the divider if properly or not, to make sure output blck not bigger than target*/
-        if ((bclkSourceClockHz / divider) > bclk)
-        {
-            divider++;
-        }
-
-#if defined(FSL_FEATURE_SAI_HAS_BCLK_BYPASS) && (FSL_FEATURE_SAI_HAS_BCLK_BYPASS)
-        /* if bclk same with MCLK, bypass the divider */
-        if (divider == 1U)
-        {
-            base->TCR2 |= I2S_TCR2_BYP_MASK;
-        }
-        else
-#endif
-        {
-            base->TCR2 |= I2S_TCR2_DIV(divider / 2U - 1U);
-        }
-    }
-
-    /* Set bitWidth */
-    val = (format->isFrameSyncCompact) ? (format->bitWidth - 1) : 31U;
-    if (format->protocol == kSAI_BusRightJustified)
-    {
-        base->TCR5 = I2S_TCR5_WNW(val) | I2S_TCR5_W0W(val) | I2S_TCR5_FBT(val);
-    }
-    else
-    {
-        if (base->TCR4 & I2S_TCR4_MF_MASK)
-        {
-            base->TCR5 = I2S_TCR5_WNW(val) | I2S_TCR5_W0W(val) | I2S_TCR5_FBT(format->bitWidth - 1);
-        }
-        else
-        {
-            base->TCR5 = I2S_TCR5_WNW(val) | I2S_TCR5_W0W(val) | I2S_TCR5_FBT(0);
-        }
-    }
-
-    /* Set mono or stereo */
-    base->TMR = (uint32_t)format->stereo;
-
-    /* if channel mask is not set, then format->channel must be set,
-     use it to get channel mask value */
-    if (format->channelMask == 0U)
-    {
-        format->channelMask = 1U << format->channel;
-    }
-
-    /* if channel nums is not set, calculate it here according to channelMask*/
-    for (i = 0U; i < (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base); i++)
-    {
-        if (((uint32_t)1 << i) & format->channelMask)
-        {
-            /* geet start channel number when channelNums = 0 only */
-            if (channelNums == 0U)
-            {
-                format->channel = i;
-            }
-            channelNums++;
-            format->endChannel = i;
-        }
-    }
-    format->channelNums = channelNums;
-    assert(format->channelNums <= FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
-
-#if defined(FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE) && (FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE)
-    /* make sure combine mode disabled while multipe channel is used */
-    if (format->channelNums > 1U)
-    {
-        base->TCR4 &= ~I2S_TCR4_FCOMB_MASK;
-    }
-#endif
-
-    /* Set data channel */
-    base->TCR3 &= ~I2S_TCR3_TCE_MASK;
-    base->TCR3 |= I2S_TCR3_TCE(format->channelMask);
-
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    /* Set watermark */
-    base->TCR1 = format->watermark;
-#endif /* FSL_FEATURE_SAI_FIFO_COUNT  */
-}
-
-/*!
- * brief Configures the SAI Rx audio format.
- *
- * deprecated Do not use this function.  It has been superceded by @ref SAI_RxSetConfig
- *
- * The audio format can be changed at run-time. This function configures the sample rate and audio data
- * format to be transferred.
- *
- * param base SAI base pointer.
- * param format Pointer to the SAI audio data format structure.
- * param mclkSourceClockHz SAI master clock source frequency in Hz.
- * param bclkSourceClockHz SAI bit clock source frequency in Hz. If the bit clock source is a master
- * clock, this value should equal the masterClockHz.
- */
-void SAI_RxSetFormat(I2S_Type *base,
-                     sai_transfer_format_t *format,
-                     uint32_t mclkSourceClockHz,
-                     uint32_t bclkSourceClockHz)
-{
-    assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) != -1);
-
-    uint32_t bclk    = 0;
-    uint32_t val     = 0;
-    uint32_t i       = 0U;
-    uint32_t divider = 0U, channelNums = 0U;
-
-    if (format->isFrameSyncCompact)
-    {
-        bclk = format->sampleRate_Hz * format->bitWidth * (format->stereo == kSAI_Stereo ? 2U : 1U);
-        val  = (base->RCR4 & (~I2S_RCR4_SYWD_MASK));
-        val |= I2S_RCR4_SYWD(format->bitWidth - 1U);
-        base->RCR4 = val;
-    }
-    else
-    {
-        bclk = format->sampleRate_Hz * 32U * 2U;
-    }
-
-/* Compute the mclk */
-#if defined(FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER) && (FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER)
-    /* Check if master clock divider enabled */
-    if (base->MCR & I2S_MCR_MOE_MASK)
-    {
-        SAI_SetMasterClockDivider(base, format->masterClockHz, mclkSourceClockHz);
-    }
-#endif /* FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER */
-
-    /* Set bclk if needed */
-    if (base->RCR2 & I2S_RCR2_BCD_MASK)
-    {
-        base->RCR2 &= ~I2S_RCR2_DIV_MASK;
-        /* need to check the divided bclk, if bigger than target, then divider need to re-calculate. */
-        divider = bclkSourceClockHz / bclk;
-        /* for the condition where the source clock is smaller than target bclk */
-        if (divider == 0U)
-        {
-            divider++;
-        }
-        /* recheck the divider if properly or not, to make sure output blck not bigger than target*/
-        if ((bclkSourceClockHz / divider) > bclk)
-        {
-            divider++;
-        }
-#if defined(FSL_FEATURE_SAI_HAS_BCLK_BYPASS) && (FSL_FEATURE_SAI_HAS_BCLK_BYPASS)
-        /* if bclk same with MCLK, bypass the divider */
-        if (divider == 1U)
-        {
-            base->RCR2 |= I2S_RCR2_BYP_MASK;
-        }
-        else
-#endif
-        {
-            base->RCR2 |= I2S_RCR2_DIV(divider / 2U - 1U);
-        }
-    }
-
-    /* Set bitWidth */
-    val = (format->isFrameSyncCompact) ? (format->bitWidth - 1) : 31U;
-    if (format->protocol == kSAI_BusRightJustified)
-    {
-        base->RCR5 = I2S_RCR5_WNW(val) | I2S_RCR5_W0W(val) | I2S_RCR5_FBT(val);
-    }
-    else
-    {
-        if (base->RCR4 & I2S_RCR4_MF_MASK)
-        {
-            base->RCR5 = I2S_RCR5_WNW(val) | I2S_RCR5_W0W(val) | I2S_RCR5_FBT(format->bitWidth - 1);
-        }
-        else
-        {
-            base->RCR5 = I2S_RCR5_WNW(val) | I2S_RCR5_W0W(val) | I2S_RCR5_FBT(0);
-        }
-    }
-
-    /* Set mono or stereo */
-    base->RMR = (uint32_t)format->stereo;
-
-    /* if channel mask is not set, then format->channel must be set,
-     use it to get channel mask value */
-    if (format->channelMask == 0U)
-    {
-        format->channelMask = 1U << format->channel;
-    }
-
-    /* if channel nums is not set, calculate it here according to channelMask*/
-    for (i = 0U; i < (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base); i++)
-    {
-        if (((uint32_t)1 << i) & format->channelMask)
-        {
-            /* geet start channel number when channelNums = 0 only */
-            if (channelNums == 0U)
-            {
-                format->channel = i;
-            }
-            channelNums++;
-            format->endChannel = i;
-        }
-    }
-    format->channelNums = channelNums;
-    assert(format->channelNums <= FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
-
-#if defined(FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE) && (FSL_FEATURE_SAI_HAS_FIFO_COMBINE_MODE)
-    /* make sure combine mode disabled while multipe channel is used */
-    if (format->channelNums > 1U)
-    {
-        base->RCR4 &= ~I2S_RCR4_FCOMB_MASK;
-    }
-#endif
-
-    /* Set data channel */
-    base->RCR3 &= ~I2S_RCR3_RCE_MASK;
-    /* enable all the channel */
-    base->RCR3 |= I2S_RCR3_RCE(format->channelMask);
-
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    /* Set watermark */
-    base->RCR1 = format->watermark;
-#endif /* FSL_FEATURE_SAI_FIFO_COUNT  */
+    config->serialData.dataWordNum      = (uint8_t)dataWordNum;
 }
 
 /*!
@@ -2038,26 +1681,43 @@ void SAI_RxSetFormat(I2S_Type *base,
  */
 void SAI_WriteBlocking(I2S_Type *base, uint32_t channel, uint32_t bitWidth, uint8_t *buffer, uint32_t size)
 {
-    uint32_t i           = 0;
-    uint8_t bytesPerWord = bitWidth / 8U;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    bytesPerWord = (size_t)((FSL_FEATURE_SAI_FIFO_COUNT - base->TCR1) * bytesPerWord);
+    uint32_t i            = 0;
+    uint32_t bytesPerWord = bitWidth / 8U;
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    uint32_t fifoCount = (uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base);
+    if (fifoCount >= base->TCR1)
+    {
+        fifoCount -= base->TCR1;
+
+        // Prevent potential multiplication overflow by limiting bytesPerWord
+        if ((bitWidth / 8U) < (UINT32_MAX / fifoCount))
+        {
+            bytesPerWord = (fifoCount * (bitWidth / 8U));
+        }
+        else
+        {
+            bytesPerWord = UINT32_MAX;
+        }
+    }
 #endif
 
     while (i < size)
     {
         /* Wait until it can write data */
-        while (!(base->TCSR & I2S_TCSR_FWF_MASK))
+        while (!(IS_SAI_FLAG_SET(base->TCSR, I2S_TCSR_FWF_MASK)))
         {
         }
 
-        SAI_WriteNonBlocking(base, channel, 1U << channel, channel, bitWidth, buffer, bytesPerWord);
-        buffer += bytesPerWord;
+        SAI_WriteNonBlocking(base, channel, 1UL << channel, channel, (uint8_t)(bitWidth & 0xFFU), buffer, bytesPerWord);
+        buffer = (uint8_t *)((uintptr_t)buffer + bytesPerWord);
+
+        if (i > SIZE_MAX - bytesPerWord) break;
+
         i += bytesPerWord;
     }
 
     /* Wait until the last data is sent */
-    while (!(base->TCSR & I2S_TCSR_FWF_MASK))
+    while (!(IS_SAI_FLAG_SET(base->TCSR, I2S_TCSR_FWF_MASK)))
     {
     }
 }
@@ -2078,41 +1738,77 @@ void SAI_WriteMultiChannelBlocking(
     I2S_Type *base, uint32_t channel, uint32_t channelMask, uint32_t bitWidth, uint8_t *buffer, uint32_t size)
 {
     assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) != -1);
+    assert(bitWidth <= UINT8_MAX);
 
     uint32_t i = 0, j = 0;
-    uint8_t bytesPerWord = bitWidth / 8U;
+    uint32_t bytesPerWord = bitWidth / 8U;
     uint32_t channelNums = 0U, endChannel = 0U;
 
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    bytesPerWord = (size_t)((FSL_FEATURE_SAI_FIFO_COUNT - base->TCR1) * bytesPerWord);
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    uint32_t fifoCount = (uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base);
+    if (fifoCount >= base->TCR1)
+    {
+        fifoCount -= base->TCR1;
+
+        // Prevent potential multiplication overflow by limiting bytesPerWord
+        if ((bitWidth / 8U) < (UINT32_MAX / fifoCount))
+        {
+            bytesPerWord = (fifoCount * (bitWidth / 8U));
+        }
+        else
+        {
+            bytesPerWord = UINT32_MAX;
+        }
+    }
 #endif
 
     for (i = 0U; (i < (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base)); i++)
     {
-        if ((1U << i) & (channelMask))
+        if (IS_SAI_FLAG_SET((1UL << i), channelMask))
         {
-            channelNums++;
+            // Prevent potential addition overflow by capping at maximum value
+            if (channelNums < UINT32_MAX)
+            {
+                channelNums++;
+            }
+            else
+            {
+                channelNums = UINT32_MAX;
+            }
+
             endChannel = i;
         }
     }
 
-    assert(channelNums <= (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
-    bytesPerWord *= channelNums;
+    // Check for multiplication overflow before performing the operation
+    if ((bytesPerWord > (UINT32_MAX / channelNums)))
+    {
+        // Handle overflow case by capping at maximum value
+        bytesPerWord = UINT32_MAX;
+    }
+    else
+    {
+        bytesPerWord *= channelNums;
+    }
 
     while (j < size)
     {
         /* Wait until it can write data */
-        while (!(base->TCSR & I2S_TCSR_FWF_MASK))
+        while (!(IS_SAI_FLAG_SET(base->TCSR, I2S_TCSR_FWF_MASK)))
         {
         }
 
-        SAI_WriteNonBlocking(base, channel, channelMask, endChannel, bitWidth, buffer, bytesPerWord);
-        buffer += bytesPerWord;
-        j += bytesPerWord;
+        /* Handle multiplication overflow */
+        if (bytesPerWord > UINT32_MAX / channelNums || (UINT32_MAX - j) < (bytesPerWord * channelNums)) break;
+
+        SAI_WriteNonBlocking(base, channel, channelMask, endChannel, (uint8_t)bitWidth, buffer,
+                             bytesPerWord * channelNums);
+        buffer = (uint8_t *)((uintptr_t)buffer + bytesPerWord * channelNums);
+        j += bytesPerWord * channelNums;
     }
 
     /* Wait until the last data is sent */
-    while (!(base->TCSR & I2S_TCSR_FWF_MASK))
+    while (!(IS_SAI_FLAG_SET(base->TCSR, I2S_TCSR_FWF_MASK)))
     {
     }
 }
@@ -2133,35 +1829,60 @@ void SAI_ReadMultiChannelBlocking(
     I2S_Type *base, uint32_t channel, uint32_t channelMask, uint32_t bitWidth, uint8_t *buffer, uint32_t size)
 {
     assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) != -1);
+    assert(bitWidth <= UINT8_MAX);
 
     uint32_t i = 0, j = 0;
-    uint8_t bytesPerWord = bitWidth / 8U;
+    uint32_t bytesPerWord = bitWidth / 8U;
     uint32_t channelNums = 0U, endChannel = 0U;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    bytesPerWord = (size_t)(base->RCR1 * bytesPerWord);
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if (base->RCR1 && (bytesPerWord <= UINT32_MAX / base->RCR1))
+    {
+        bytesPerWord = base->RCR1 * bytesPerWord;
+    }
 #endif
     for (i = 0U; (i < (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base)); i++)
     {
-        if ((1U << i) & (channelMask))
+        if (IS_SAI_FLAG_SET((1UL << i), channelMask))
         {
-            channelNums++;
+            // Prevent potential addition overflow by capping at maximum value
+            if (channelNums < UINT32_MAX)
+            {
+                channelNums++;
+            }
+            else
+            {
+                channelNums = UINT32_MAX;
+            }
+
             endChannel = i;
         }
     }
 
-    assert(channelNums <= (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
-    bytesPerWord *= channelNums;
+    // Check for multiplication overflow before performing the operation
+    if ((bytesPerWord > (UINT32_MAX / channelNums)))
+    {
+        // Handle overflow case by capping at maximum value
+        bytesPerWord = UINT32_MAX;
+    }
+    else
+    {
+        bytesPerWord *= channelNums;
+    }
 
     while (j < size)
     {
         /* Wait until data is received */
-        while (!(base->RCSR & I2S_RCSR_FWF_MASK))
+        while (!(IS_SAI_FLAG_SET(base->RCSR, I2S_RCSR_FWF_MASK)))
         {
         }
 
-        SAI_ReadNonBlocking(base, channel, channelMask, endChannel, bitWidth, buffer, bytesPerWord);
-        buffer += bytesPerWord;
-        j += bytesPerWord;
+        /* Handle multiplication overflow */
+        if (bytesPerWord > UINT32_MAX / channelNums || (UINT32_MAX - j) < (bytesPerWord * channelNums)) break;
+
+        SAI_ReadNonBlocking(base, channel, channelMask, endChannel, (uint8_t)(bitWidth & 0xFFU), buffer,
+                            bytesPerWord * channelNums);
+        buffer = (uint8_t *)((uintptr_t)buffer + bytesPerWord * channelNums);
+        j += bytesPerWord * channelNums;
     }
 }
 
@@ -2178,21 +1899,27 @@ void SAI_ReadMultiChannelBlocking(
  */
 void SAI_ReadBlocking(I2S_Type *base, uint32_t channel, uint32_t bitWidth, uint8_t *buffer, uint32_t size)
 {
-    uint32_t i           = 0;
-    uint8_t bytesPerWord = bitWidth / 8U;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    bytesPerWord = (size_t)(base->RCR1 * bytesPerWord);
+    uint32_t i            = 0;
+    uint32_t bytesPerWord = bitWidth / 8U;
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if (base->RCR1 && (bytesPerWord <= UINT32_MAX / base->RCR1))
+    {
+        bytesPerWord = base->RCR1 * bytesPerWord;
+    }
 #endif
 
     while (i < size)
     {
         /* Wait until data is received */
-        while (!(base->RCSR & I2S_RCSR_FWF_MASK))
+        while (!(IS_SAI_FLAG_SET(base->RCSR, I2S_RCSR_FWF_MASK)))
         {
         }
 
-        SAI_ReadNonBlocking(base, channel, 1U << channel, channel, bitWidth, buffer, bytesPerWord);
-        buffer += bytesPerWord;
+        SAI_ReadNonBlocking(base, channel, 1UL << channel, channel, (uint8_t)(bitWidth & 0xFFU), buffer, bytesPerWord);
+        buffer = (uint8_t *)((uintptr_t)buffer + bytesPerWord);
+
+        if (i > SIZE_MAX - bytesPerWord) break;
+
         i += bytesPerWord;
     }
 }
@@ -2210,10 +1937,10 @@ void SAI_ReadBlocking(I2S_Type *base, uint32_t channel, uint32_t bitWidth, uint8
  */
 void SAI_TransferTxCreateHandle(I2S_Type *base, sai_handle_t *handle, sai_transfer_callback_t callback, void *userData)
 {
-    assert(handle);
+    assert(handle != NULL);
 
     /* Zero the handle */
-    memset(handle, 0, sizeof(*handle));
+    (void)memset(handle, 0, sizeof(*handle));
 
     s_saiHandle[SAI_GetInstance(base)][0] = handle;
 
@@ -2225,7 +1952,7 @@ void SAI_TransferTxCreateHandle(I2S_Type *base, sai_handle_t *handle, sai_transf
     s_saiTxIsr = SAI_TransferTxHandleIRQ;
 
     /* Enable Tx irq */
-    EnableIRQ(s_saiTxIRQ[SAI_GetInstance(base)]);
+    (void)EnableIRQ(s_saiTxIRQ[SAI_GetInstance(base)]);
 }
 
 /*!
@@ -2241,10 +1968,10 @@ void SAI_TransferTxCreateHandle(I2S_Type *base, sai_handle_t *handle, sai_transf
  */
 void SAI_TransferRxCreateHandle(I2S_Type *base, sai_handle_t *handle, sai_transfer_callback_t callback, void *userData)
 {
-    assert(handle);
+    assert(handle != NULL);
 
     /* Zero the handle */
-    memset(handle, 0, sizeof(*handle));
+    (void)memset(handle, 0, sizeof(*handle));
 
     s_saiHandle[SAI_GetInstance(base)][1] = handle;
 
@@ -2256,107 +1983,7 @@ void SAI_TransferRxCreateHandle(I2S_Type *base, sai_handle_t *handle, sai_transf
     s_saiRxIsr = SAI_TransferRxHandleIRQ;
 
     /* Enable Rx irq */
-    EnableIRQ(s_saiRxIRQ[SAI_GetInstance(base)]);
-}
-
-/*!
- * brief Configures the SAI Tx audio format.
- *
- * deprecated Do not use this function.  It has been superceded by @ref SAI_TxSetTransferConfig
- *
- * The audio format can be changed at run-time. This function configures the sample rate and audio data
- * format to be transferred.
- *
- * param base SAI base pointer.
- * param handle SAI handle pointer.
- * param format Pointer to the SAI audio data format structure.
- * param mclkSourceClockHz SAI master clock source frequency in Hz.
- * param bclkSourceClockHz SAI bit clock source frequency in Hz. If a bit clock source is a master
- * clock, this value should equal the masterClockHz in format.
- * return Status of this function. Return value is the status_t.
- */
-status_t SAI_TransferTxSetFormat(I2S_Type *base,
-                                 sai_handle_t *handle,
-                                 sai_transfer_format_t *format,
-                                 uint32_t mclkSourceClockHz,
-                                 uint32_t bclkSourceClockHz)
-{
-    assert(handle);
-
-    if ((bclkSourceClockHz < format->sampleRate_Hz)
-#if defined(FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER) && (FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER)
-        || (mclkSourceClockHz < format->sampleRate_Hz)
-#endif
-    )
-    {
-        return kStatus_InvalidArgument;
-    }
-
-    /* Copy format to handle */
-    handle->bitWidth = format->bitWidth;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    handle->watermark = format->watermark;
-#endif
-
-    SAI_TxSetFormat(base, format, mclkSourceClockHz, bclkSourceClockHz);
-
-    handle->channel = format->channel;
-    /* used for multi channel */
-    handle->channelMask = format->channelMask;
-    handle->channelNums = format->channelNums;
-    handle->endChannel  = format->endChannel;
-
-    return kStatus_Success;
-}
-
-/*!
- * brief Configures the SAI Rx audio format.
- *
- * deprecated Do not use this function.  It has been superceded by @ref SAI_RxSetTransferConfig
- *
- * The audio format can be changed at run-time. This function configures the sample rate and audio data
- * format to be transferred.
- *
- * param base SAI base pointer.
- * param handle SAI handle pointer.
- * param format Pointer to the SAI audio data format structure.
- * param mclkSourceClockHz SAI master clock source frequency in Hz.
- * param bclkSourceClockHz SAI bit clock source frequency in Hz. If a bit clock source is a master
- * clock, this value should equal the masterClockHz in format.
- * return Status of this function. Return value is one of status_t.
- */
-status_t SAI_TransferRxSetFormat(I2S_Type *base,
-                                 sai_handle_t *handle,
-                                 sai_transfer_format_t *format,
-                                 uint32_t mclkSourceClockHz,
-                                 uint32_t bclkSourceClockHz)
-{
-    assert(handle);
-
-    if ((bclkSourceClockHz < format->sampleRate_Hz)
-#if defined(FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER) && (FSL_FEATURE_SAI_HAS_MCLKDIV_REGISTER)
-        || (mclkSourceClockHz < format->sampleRate_Hz)
-#endif
-    )
-    {
-        return kStatus_InvalidArgument;
-    }
-
-    /* Copy format to handle */
-    handle->bitWidth = format->bitWidth;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    handle->watermark = format->watermark;
-#endif
-
-    SAI_RxSetFormat(base, format, mclkSourceClockHz, bclkSourceClockHz);
-
-    handle->channel = format->channel;
-    /* used for multi channel */
-    handle->channelMask = format->channelMask;
-    handle->channelNums = format->channelNums;
-    handle->endChannel  = format->endChannel;
-
-    return kStatus_Success;
+    (void)EnableIRQ(s_saiRxIRQ[SAI_GetInstance(base)]);
 }
 
 /*!
@@ -2376,10 +2003,12 @@ status_t SAI_TransferRxSetFormat(I2S_Type *base,
  */
 status_t SAI_TransferSendNonBlocking(I2S_Type *base, sai_handle_t *handle, sai_transfer_t *xfer)
 {
-    assert(handle);
+    assert(handle != NULL);
+    assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) >= 0);
+    assert(handle->channelNums <= (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
 
     /* Check if the queue is full */
-    if (handle->saiQueue[handle->queueUser].data)
+    if (handle->saiQueue[handle->queueUser].data != NULL)
     {
         return kStatus_SAI_QueueFull;
     }
@@ -2388,18 +2017,18 @@ status_t SAI_TransferSendNonBlocking(I2S_Type *base, sai_handle_t *handle, sai_t
     handle->transferSize[handle->queueUser]      = xfer->dataSize;
     handle->saiQueue[handle->queueUser].data     = xfer->data;
     handle->saiQueue[handle->queueUser].dataSize = xfer->dataSize;
-    handle->queueUser                            = (handle->queueUser + 1) % SAI_XFER_QUEUE_SIZE;
+    handle->queueUser                            = (handle->queueUser + 1U) % (uint8_t)SAI_XFER_QUEUE_SIZE;
 
     /* Set the state to busy */
-    handle->state = kSAI_Busy;
+    handle->state = (uint32_t)kSAI_Busy;
 
     /* Enable interrupt */
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
     /* Use FIFO request interrupt and fifo error*/
-    SAI_TxEnableInterrupts(base, kSAI_FIFOErrorInterruptEnable | kSAI_FIFORequestInterruptEnable);
+    SAI_TxEnableInterrupts(base, I2S_TCSR_FEIE_MASK | I2S_TCSR_FRIE_MASK);
 #else
-    SAI_TxEnableInterrupts(base, kSAI_FIFOErrorInterruptEnable | kSAI_FIFOWarningInterruptEnable);
-#endif /* FSL_FEATURE_SAI_FIFO_COUNT */
+    SAI_TxEnableInterrupts(base, I2S_TCSR_FEIE_MASK | I2S_TCSR_FWIE_MASK);
+#endif /* FSL_FEATURE_SAI_HAS_FIFO */
 
     /* Enable Tx transfer */
     SAI_TxEnable(base, true);
@@ -2424,10 +2053,12 @@ status_t SAI_TransferSendNonBlocking(I2S_Type *base, sai_handle_t *handle, sai_t
  */
 status_t SAI_TransferReceiveNonBlocking(I2S_Type *base, sai_handle_t *handle, sai_transfer_t *xfer)
 {
-    assert(handle);
+    assert(handle != NULL);
+    assert(FSL_FEATURE_SAI_CHANNEL_COUNTn(base) >= 0);
+    assert(handle->channelNums <= (uint32_t)FSL_FEATURE_SAI_CHANNEL_COUNTn(base));
 
     /* Check if the queue is full */
-    if (handle->saiQueue[handle->queueUser].data)
+    if (handle->saiQueue[handle->queueUser].data != NULL)
     {
         return kStatus_SAI_QueueFull;
     }
@@ -2436,18 +2067,18 @@ status_t SAI_TransferReceiveNonBlocking(I2S_Type *base, sai_handle_t *handle, sa
     handle->transferSize[handle->queueUser]      = xfer->dataSize;
     handle->saiQueue[handle->queueUser].data     = xfer->data;
     handle->saiQueue[handle->queueUser].dataSize = xfer->dataSize;
-    handle->queueUser                            = (handle->queueUser + 1) % SAI_XFER_QUEUE_SIZE;
+    handle->queueUser                            = (handle->queueUser + 1U) % (uint8_t)SAI_XFER_QUEUE_SIZE;
 
     /* Set state to busy */
-    handle->state = kSAI_Busy;
+    handle->state = (uint32_t)kSAI_Busy;
 
 /* Enable interrupt */
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
     /* Use FIFO request interrupt and fifo error*/
-    SAI_RxEnableInterrupts(base, kSAI_FIFOErrorInterruptEnable | kSAI_FIFORequestInterruptEnable);
+    SAI_RxEnableInterrupts(base, I2S_TCSR_FEIE_MASK | I2S_TCSR_FRIE_MASK);
 #else
-    SAI_RxEnableInterrupts(base, kSAI_FIFOErrorInterruptEnable | kSAI_FIFOWarningInterruptEnable);
-#endif /* FSL_FEATURE_SAI_FIFO_COUNT */
+    SAI_RxEnableInterrupts(base, I2S_TCSR_FEIE_MASK | I2S_TCSR_FWIE_MASK);
+#endif /* FSL_FEATURE_SAI_HAS_FIFO */
 
     /* Enable Rx transfer */
     SAI_RxEnable(base, true);
@@ -2466,17 +2097,18 @@ status_t SAI_TransferReceiveNonBlocking(I2S_Type *base, sai_handle_t *handle, sa
  */
 status_t SAI_TransferGetSendCount(I2S_Type *base, sai_handle_t *handle, size_t *count)
 {
-    assert(handle);
+    assert(handle != NULL);
 
-    status_t status = kStatus_Success;
+    status_t status           = kStatus_Success;
+    uint32_t queueDriverIndex = handle->queueDriver;
 
-    if (handle->state != kSAI_Busy)
+    if (handle->state != (uint32_t)kSAI_Busy)
     {
         status = kStatus_NoTransferInProgress;
     }
     else
     {
-        *count = (handle->transferSize[handle->queueDriver] - handle->saiQueue[handle->queueDriver].dataSize);
+        *count = (handle->transferSize[queueDriverIndex] - handle->saiQueue[queueDriverIndex].dataSize);
     }
 
     return status;
@@ -2493,17 +2125,18 @@ status_t SAI_TransferGetSendCount(I2S_Type *base, sai_handle_t *handle, size_t *
  */
 status_t SAI_TransferGetReceiveCount(I2S_Type *base, sai_handle_t *handle, size_t *count)
 {
-    assert(handle);
+    assert(handle != NULL);
 
-    status_t status = kStatus_Success;
+    status_t status           = kStatus_Success;
+    uint32_t queueDriverIndex = handle->queueDriver;
 
-    if (handle->state != kSAI_Busy)
+    if (handle->state != (uint32_t)kSAI_Busy)
     {
         status = kStatus_NoTransferInProgress;
     }
     else
     {
-        *count = (handle->transferSize[handle->queueDriver] - handle->saiQueue[handle->queueDriver].dataSize);
+        *count = (handle->transferSize[queueDriverIndex] - handle->saiQueue[queueDriverIndex].dataSize);
     }
 
     return status;
@@ -2520,21 +2153,21 @@ status_t SAI_TransferGetReceiveCount(I2S_Type *base, sai_handle_t *handle, size_
  */
 void SAI_TransferAbortSend(I2S_Type *base, sai_handle_t *handle)
 {
-    assert(handle);
+    assert(handle != NULL);
 
     /* Stop Tx transfer and disable interrupt */
     SAI_TxEnable(base, false);
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
     /* Use FIFO request interrupt and fifo error */
-    SAI_TxDisableInterrupts(base, kSAI_FIFOErrorInterruptEnable | kSAI_FIFORequestInterruptEnable);
+    SAI_TxDisableInterrupts(base, I2S_TCSR_FEIE_MASK | I2S_TCSR_FRIE_MASK);
 #else
-    SAI_TxDisableInterrupts(base, kSAI_FIFOErrorInterruptEnable | kSAI_FIFOWarningInterruptEnable);
-#endif /* FSL_FEATURE_SAI_FIFO_COUNT */
+    SAI_TxDisableInterrupts(base, I2S_TCSR_FEIE_MASK | I2S_TCSR_FWIE_MASK);
+#endif /* FSL_FEATURE_SAI_HAS_FIFO */
 
-    handle->state = kSAI_Idle;
+    handle->state = (uint32_t)kSAI_Idle;
 
     /* Clear the queue */
-    memset(handle->saiQueue, 0, sizeof(sai_transfer_t) * SAI_XFER_QUEUE_SIZE);
+    (void)memset(handle->saiQueue, 0, sizeof(sai_transfer_t) * (uint8_t)SAI_XFER_QUEUE_SIZE);
     handle->queueDriver = 0;
     handle->queueUser   = 0;
 }
@@ -2550,21 +2183,21 @@ void SAI_TransferAbortSend(I2S_Type *base, sai_handle_t *handle)
  */
 void SAI_TransferAbortReceive(I2S_Type *base, sai_handle_t *handle)
 {
-    assert(handle);
+    assert(handle != NULL);
 
     /* Stop Tx transfer and disable interrupt */
     SAI_RxEnable(base, false);
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
     /* Use FIFO request interrupt and fifo error */
-    SAI_RxDisableInterrupts(base, kSAI_FIFOErrorInterruptEnable | kSAI_FIFORequestInterruptEnable);
+    SAI_RxDisableInterrupts(base, I2S_TCSR_FEIE_MASK | I2S_TCSR_FRIE_MASK);
 #else
-    SAI_RxDisableInterrupts(base, kSAI_FIFOErrorInterruptEnable | kSAI_FIFOWarningInterruptEnable);
-#endif /* FSL_FEATURE_SAI_FIFO_COUNT */
+    SAI_RxDisableInterrupts(base, I2S_TCSR_FEIE_MASK | I2S_TCSR_FWIE_MASK);
+#endif /* FSL_FEATURE_SAI_HAS_FIFO */
 
-    handle->state = kSAI_Idle;
+    handle->state = (uint32_t)kSAI_Idle;
 
     /* Clear the queue */
-    memset(handle->saiQueue, 0, sizeof(sai_transfer_t) * SAI_XFER_QUEUE_SIZE);
+    (void)memset(handle->saiQueue, 0, sizeof(sai_transfer_t) * (uint8_t)SAI_XFER_QUEUE_SIZE);
     handle->queueDriver = 0;
     handle->queueUser   = 0;
 }
@@ -2580,14 +2213,15 @@ void SAI_TransferAbortReceive(I2S_Type *base, sai_handle_t *handle)
  */
 void SAI_TransferTerminateSend(I2S_Type *base, sai_handle_t *handle)
 {
-    assert(handle);
+    assert(handle != NULL);
 
     /* Abort the current transfer */
     SAI_TransferAbortSend(base, handle);
 
     /* Clear all the internal information */
-    memset(handle->saiQueue, 0U, sizeof(handle->saiQueue));
-    memset(handle->transferSize, 0U, sizeof(handle->transferSize));
+    (void)memset(handle->saiQueue, 0, sizeof(handle->saiQueue));
+    (void)memset(handle->transferSize, 0, sizeof(handle->transferSize));
+
     handle->queueUser   = 0U;
     handle->queueDriver = 0U;
 }
@@ -2603,14 +2237,15 @@ void SAI_TransferTerminateSend(I2S_Type *base, sai_handle_t *handle)
  */
 void SAI_TransferTerminateReceive(I2S_Type *base, sai_handle_t *handle)
 {
-    assert(handle);
+    assert(handle != NULL);
 
     /* Abort the current transfer */
     SAI_TransferAbortReceive(base, handle);
 
     /* Clear all the internal information */
-    memset(handle->saiQueue, 0U, sizeof(handle->saiQueue));
-    memset(handle->transferSize, 0U, sizeof(handle->transferSize));
+    (void)memset(handle->saiQueue, 0, sizeof(handle->saiQueue));
+    (void)memset(handle->transferSize, 0, sizeof(handle->transferSize));
+
     handle->queueUser   = 0U;
     handle->queueDriver = 0U;
 }
@@ -2623,63 +2258,91 @@ void SAI_TransferTerminateReceive(I2S_Type *base, sai_handle_t *handle)
  */
 void SAI_TransferTxHandleIRQ(I2S_Type *base, sai_handle_t *handle)
 {
-    assert(handle);
+    assert(handle != NULL);
 
-    uint8_t *buffer  = handle->saiQueue[handle->queueDriver].data;
-    uint8_t dataSize = (handle->bitWidth / 8U) * handle->channelNums;
+    uint8_t *buffer   = handle->saiQueue[handle->queueDriver].data;
+    uint32_t dataSize = (handle->bitWidth / 8UL) * handle->channelNums;
 
     /* Handle Error */
-    if (base->TCSR & I2S_TCSR_FEF_MASK)
+    if (IS_SAI_FLAG_SET(base->TCSR, I2S_TCSR_FEF_MASK))
     {
         /* Clear FIFO error flag to continue transfer */
-        SAI_TxClearStatusFlags(base, kSAI_FIFOErrorFlag);
+        SAI_TxClearStatusFlags(base, I2S_TCSR_FEF_MASK);
 
         /* Reset FIFO for safety */
         SAI_TxSoftwareReset(base, kSAI_ResetTypeFIFO);
 
         /* Call the callback */
-        if (handle->callback)
+        if (handle->callback != NULL)
         {
             (handle->callback)(base, handle, kStatus_SAI_TxError, handle->userData);
         }
     }
 
 /* Handle transfer */
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if (base->TCSR & I2S_TCSR_FRF_MASK)
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if (IS_SAI_FLAG_SET(base->TCSR, I2S_TCSR_FRF_MASK))
     {
         /* Judge if the data need to transmit is less than space */
-        uint8_t size = MIN((handle->saiQueue[handle->queueDriver].dataSize),
-                           (size_t)((FSL_FEATURE_SAI_FIFO_COUNT - handle->watermark) * dataSize));
+        size_t size;
+        /* Check for potential overflow before multiplication */
+        if (dataSize > SIZE_MAX / ((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base) - handle->watermark))
+        {
+            size = MIN((handle->saiQueue[handle->queueDriver].dataSize), SIZE_MAX);
+        }
+        else
+        {
+            size = MIN((handle->saiQueue[handle->queueDriver].dataSize),
+                          (size_t)(((uint32_t)FSL_FEATURE_SAI_FIFO_COUNTn(base) - handle->watermark) * dataSize));
+        }
 
         /* Copy the data from sai buffer to FIFO */
         SAI_WriteNonBlocking(base, handle->channel, handle->channelMask, handle->endChannel, handle->bitWidth, buffer,
                              size);
 
         /* Update the internal counter */
-        handle->saiQueue[handle->queueDriver].dataSize -= size;
-        handle->saiQueue[handle->queueDriver].data += size;
+        // Before subtraction, verify size is valid
+        if (size <= handle->saiQueue[handle->queueDriver].dataSize)
+        {
+            handle->saiQueue[handle->queueDriver].dataSize -= size;
+            handle->saiQueue[handle->queueDriver].data = (uint8_t *)((uintptr_t)buffer + size);
+        }
+        else
+        {
+            // Handle error case - size is larger than remaining data
+            handle->saiQueue[handle->queueDriver].dataSize = 0;
+            handle->saiQueue[handle->queueDriver].data = NULL;
+        }
     }
 #else
-    if (base->TCSR & I2S_TCSR_FWF_MASK)
+    if (IS_SAI_FLAG_SET(base->TCSR, I2S_TCSR_FWF_MASK))
     {
-        uint8_t size = MIN((handle->saiQueue[handle->queueDriver].dataSize), dataSize);
+        size_t size = MIN((handle->saiQueue[handle->queueDriver].dataSize), dataSize);
 
         SAI_WriteNonBlocking(base, handle->channel, handle->channelMask, handle->endChannel, handle->bitWidth, buffer,
                              size);
 
         /* Update internal counter */
-        handle->saiQueue[handle->queueDriver].dataSize -= size;
-        handle->saiQueue[handle->queueDriver].data += size;
+        if (size <= handle->saiQueue[handle->queueDriver].dataSize)
+        {
+            handle->saiQueue[handle->queueDriver].dataSize -= size;
+            handle->saiQueue[handle->queueDriver].data = (uint8_t *)((uintptr_t)buffer + size);
+        }
+        else
+        {
+            // Handle error case - size is larger than remaining data
+            handle->saiQueue[handle->queueDriver].dataSize = 0;
+            handle->saiQueue[handle->queueDriver].data = NULL;
+        }
     }
-#endif /* FSL_FEATURE_SAI_FIFO_COUNT */
+#endif /* FSL_FEATURE_SAI_HAS_FIFO */
 
     /* If finished a block, call the callback function */
     if (handle->saiQueue[handle->queueDriver].dataSize == 0U)
     {
-        memset(&handle->saiQueue[handle->queueDriver], 0, sizeof(sai_transfer_t));
-        handle->queueDriver = (handle->queueDriver + 1) % SAI_XFER_QUEUE_SIZE;
-        if (handle->callback)
+        (void)memset(&handle->saiQueue[handle->queueDriver], 0, sizeof(sai_transfer_t));
+        handle->queueDriver = (handle->queueDriver + 1U) % (uint8_t)SAI_XFER_QUEUE_SIZE;
+        if (handle->callback != NULL)
         {
             (handle->callback)(base, handle, kStatus_SAI_TxIdle, handle->userData);
         }
@@ -2700,62 +2363,89 @@ void SAI_TransferTxHandleIRQ(I2S_Type *base, sai_handle_t *handle)
  */
 void SAI_TransferRxHandleIRQ(I2S_Type *base, sai_handle_t *handle)
 {
-    assert(handle);
+    assert(handle != NULL);
 
-    uint8_t *buffer  = handle->saiQueue[handle->queueDriver].data;
-    uint8_t dataSize = (handle->bitWidth / 8U) * handle->channelNums;
+    uint8_t *buffer   = handle->saiQueue[handle->queueDriver].data;
+    uint32_t dataSize = (handle->bitWidth / 8UL) * handle->channelNums;
 
     /* Handle Error */
-    if (base->RCSR & I2S_RCSR_FEF_MASK)
+    if (IS_SAI_FLAG_SET(base->RCSR, I2S_RCSR_FEF_MASK))
     {
         /* Clear FIFO error flag to continue transfer */
-        SAI_RxClearStatusFlags(base, kSAI_FIFOErrorFlag);
+        SAI_RxClearStatusFlags(base, I2S_TCSR_FEF_MASK);
 
         /* Reset FIFO for safety */
         SAI_RxSoftwareReset(base, kSAI_ResetTypeFIFO);
 
         /* Call the callback */
-        if (handle->callback)
+        if (handle->callback != NULL)
         {
             (handle->callback)(base, handle, kStatus_SAI_RxError, handle->userData);
         }
     }
 
 /* Handle transfer */
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if (base->RCSR & I2S_RCSR_FRF_MASK)
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if (IS_SAI_FLAG_SET(base->RCSR, I2S_RCSR_FRF_MASK))
     {
         /* Judge if the data need to transmit is less than space */
-        uint8_t size = MIN((handle->saiQueue[handle->queueDriver].dataSize), (handle->watermark * dataSize));
+        size_t size;
+        /* Check for potential overflow */
+        if (dataSize > 0 && handle->watermark > SIZE_MAX / dataSize)
+        {
+            size = MIN((handle->saiQueue[handle->queueDriver].dataSize), SIZE_MAX);
+        }
+        else
+        {
+            size = MIN((handle->saiQueue[handle->queueDriver].dataSize), handle->watermark * dataSize);
+        }
 
         /* Copy the data from sai buffer to FIFO */
         SAI_ReadNonBlocking(base, handle->channel, handle->channelMask, handle->endChannel, handle->bitWidth, buffer,
                             size);
 
         /* Update the internal counter */
-        handle->saiQueue[handle->queueDriver].dataSize -= size;
-        handle->saiQueue[handle->queueDriver].data += size;
+        if (size <= handle->saiQueue[handle->queueDriver].dataSize)
+        {
+            handle->saiQueue[handle->queueDriver].dataSize -= size;
+            handle->saiQueue[handle->queueDriver].data = (uint8_t *)((uintptr_t)buffer + size);
+        }
+        else
+        {
+            // Handle error case - size is larger than remaining data
+            handle->saiQueue[handle->queueDriver].dataSize = 0;
+            handle->saiQueue[handle->queueDriver].data = NULL;
+        }
     }
 #else
-    if (base->RCSR & I2S_RCSR_FWF_MASK)
+    if (IS_SAI_FLAG_SET(base->RCSR, I2S_RCSR_FWF_MASK))
     {
-        uint8_t size = MIN((handle->saiQueue[handle->queueDriver].dataSize), dataSize);
+        size_t size = MIN((handle->saiQueue[handle->queueDriver].dataSize), dataSize);
 
         SAI_ReadNonBlocking(base, handle->channel, handle->channelMask, handle->endChannel, handle->bitWidth, buffer,
                             size);
 
         /* Update internal state */
-        handle->saiQueue[handle->queueDriver].dataSize -= size;
-        handle->saiQueue[handle->queueDriver].data += size;
+        if (size <= handle->saiQueue[handle->queueDriver].dataSize)
+        {
+            handle->saiQueue[handle->queueDriver].dataSize -= size;
+            handle->saiQueue[handle->queueDriver].data = (uint8_t *)((uintptr_t)buffer + size);
+        }
+        else
+        {
+            // Handle error case - size is larger than remaining data
+            handle->saiQueue[handle->queueDriver].dataSize = 0;
+            handle->saiQueue[handle->queueDriver].data = NULL;
+        }
     }
-#endif /* FSL_FEATURE_SAI_FIFO_COUNT */
+#endif /* FSL_FEATURE_SAI_HAS_FIFO */
 
     /* If finished a block, call the callback function */
     if (handle->saiQueue[handle->queueDriver].dataSize == 0U)
     {
-        memset(&handle->saiQueue[handle->queueDriver], 0, sizeof(sai_transfer_t));
-        handle->queueDriver = (handle->queueDriver + 1) % SAI_XFER_QUEUE_SIZE;
-        if (handle->callback)
+        (void)memset(&handle->saiQueue[handle->queueDriver], 0, sizeof(sai_transfer_t));
+        handle->queueDriver = (handle->queueDriver + 1U) % (uint8_t)SAI_XFER_QUEUE_SIZE;
+        if (handle->callback != NULL)
         {
             (handle->callback)(base, handle, kStatus_SAI_RxIdle, handle->userData);
         }
@@ -2768,1070 +2458,1000 @@ void SAI_TransferRxHandleIRQ(I2S_Type *base, sai_handle_t *handle)
     }
 }
 
+void SAI_DriverIRQHandler(uint32_t instance)
+{
+    if (instance < ARRAY_SIZE(s_saiBases))
+    {
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+        if ((s_saiHandle[instance][1] != NULL) &&
+            SAI_RxGetEnabledInterruptStatus(s_saiBases[instance], (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                            (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
+#else
+        if ((s_saiHandle[instance][1] != NULL) &&
+            SAI_RxGetEnabledInterruptStatus(s_saiBases[instance], (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                            (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
+#endif
+        {
+            s_saiRxIsr(s_saiBases[instance], s_saiHandle[instance][1]);
+        }
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+        if ((s_saiHandle[instance][0] != NULL) &&
+            SAI_TxGetEnabledInterruptStatus(s_saiBases[instance], (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                            (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
+#else
+        if ((s_saiHandle[instance][0] != NULL) &&
+            SAI_TxGetEnabledInterruptStatus(s_saiBases[instance], (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                            (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
+#endif
+        {
+            s_saiTxIsr(s_saiBases[instance], s_saiHandle[instance][0]);
+        }
+        SDK_ISR_EXIT_BARRIER;
+    }
+    else
+    {
+        SDK_ISR_EXIT_BARRIER;
+    }
+}
+
 #if defined(I2S0)
+void I2S0_DriverIRQHandler(void);
 void I2S0_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[0][1]) && ((I2S0->RCSR & kSAI_FIFORequestFlag) || (I2S0->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S0->RCSR & kSAI_FIFORequestInterruptEnable) || (I2S0->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[0][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S0, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[0][1]) && ((I2S0->RCSR & kSAI_FIFOWarningFlag) || (I2S0->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S0->RCSR & kSAI_FIFOWarningInterruptEnable) || (I2S0->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[0][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S0, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(I2S0, s_saiHandle[0][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[0][0]) && ((I2S0->TCSR & kSAI_FIFORequestFlag) || (I2S0->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S0->TCSR & kSAI_FIFORequestInterruptEnable) || (I2S0->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[0][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S0, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[0][0]) && ((I2S0->TCSR & kSAI_FIFOWarningFlag) || (I2S0->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S0->TCSR & kSAI_FIFOWarningInterruptEnable) || (I2S0->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[0][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S0, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(I2S0, s_saiHandle[0][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S0_Tx_DriverIRQHandler(void);
 void I2S0_Tx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[0][0]);
+    assert(s_saiHandle[0][0] != NULL);
     s_saiTxIsr(I2S0, s_saiHandle[0][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S0_Rx_DriverIRQHandler(void);
 void I2S0_Rx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[0][1]);
+    assert(s_saiHandle[0][1] != NULL);
     s_saiRxIsr(I2S0, s_saiHandle[0][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* I2S0*/
 
 #if defined(I2S1)
+void I2S1_DriverIRQHandler(void);
 void I2S1_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) && ((I2S1->RCSR & kSAI_FIFORequestFlag) || (I2S1->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S1->RCSR & kSAI_FIFORequestInterruptEnable) || (I2S1->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S1, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) && ((I2S1->RCSR & kSAI_FIFOWarningFlag) || (I2S1->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S1->RCSR & kSAI_FIFOWarningInterruptEnable) || (I2S1->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S1, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(I2S1, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) && ((I2S1->TCSR & kSAI_FIFORequestFlag) || (I2S1->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S1->TCSR & kSAI_FIFORequestInterruptEnable) || (I2S1->TCSR & kSAI_FIFOErrorInterruptEnable)))
+
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S1, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) && ((I2S1->TCSR & kSAI_FIFOWarningFlag) || (I2S1->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S1->TCSR & kSAI_FIFOWarningInterruptEnable) || (I2S1->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S1, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(I2S1, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S1_Tx_DriverIRQHandler(void);
 void I2S1_Tx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[1][0]);
+    assert(s_saiHandle[1][0] != NULL);
     s_saiTxIsr(I2S1, s_saiHandle[1][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S1_Rx_DriverIRQHandler(void);
 void I2S1_Rx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[1][1]);
+    assert(s_saiHandle[1][1] != NULL);
     s_saiRxIsr(I2S1, s_saiHandle[1][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* I2S1*/
 
 #if defined(I2S2)
+void I2S2_DriverIRQHandler(void);
 void I2S2_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[2][1]) && ((I2S2->RCSR & kSAI_FIFORequestFlag) || (I2S2->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S2->RCSR & kSAI_FIFORequestInterruptEnable) || (I2S2->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[2][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S2, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[2][1]) && ((I2S2->RCSR & kSAI_FIFOWarningFlag) || (I2S2->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S2->RCSR & kSAI_FIFOWarningInterruptEnable) || (I2S2->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[2][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S2, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(I2S2, s_saiHandle[2][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[2][0]) && ((I2S2->TCSR & kSAI_FIFORequestFlag) || (I2S2->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S2->TCSR & kSAI_FIFORequestInterruptEnable) || (I2S2->TCSR & kSAI_FIFOErrorInterruptEnable)))
+
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[2][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S2, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[2][0]) && ((I2S2->TCSR & kSAI_FIFOWarningFlag) || (I2S2->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S2->TCSR & kSAI_FIFOWarningInterruptEnable) || (I2S2->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[2][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S2, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(I2S2, s_saiHandle[2][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S2_Tx_DriverIRQHandler(void);
 void I2S2_Tx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[2][0]);
+    assert(s_saiHandle[2][0] != NULL);
     s_saiTxIsr(I2S2, s_saiHandle[2][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S2_Rx_DriverIRQHandler(void);
 void I2S2_Rx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[2][1]);
+    assert(s_saiHandle[2][1] != NULL);
     s_saiRxIsr(I2S2, s_saiHandle[2][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* I2S2*/
 
 #if defined(I2S3)
+void I2S3_DriverIRQHandler(void);
 void I2S3_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[3][1]) && ((I2S3->RCSR & kSAI_FIFORequestFlag) || (I2S3->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S3->RCSR & kSAI_FIFORequestInterruptEnable) || (I2S3->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[3][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S3, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[3][1]) && ((I2S3->RCSR & kSAI_FIFOWarningFlag) || (I2S3->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S3->RCSR & kSAI_FIFOWarningInterruptEnable) || (I2S3->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[3][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S3, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(I2S3, s_saiHandle[3][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[3][0]) && ((I2S3->TCSR & kSAI_FIFORequestFlag) || (I2S3->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S3->TCSR & kSAI_FIFORequestInterruptEnable) || (I2S3->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[3][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S3, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[3][0]) && ((I2S3->TCSR & kSAI_FIFOWarningFlag) || (I2S3->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S3->TCSR & kSAI_FIFOWarningInterruptEnable) || (I2S3->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[3][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S3, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(I2S3, s_saiHandle[3][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S3_Tx_DriverIRQHandler(void);
 void I2S3_Tx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[3][0]);
+    assert(s_saiHandle[3][0] != NULL);
     s_saiTxIsr(I2S3, s_saiHandle[3][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S3_Rx_DriverIRQHandler(void);
 void I2S3_Rx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[3][1]);
+    assert(s_saiHandle[3][1] != NULL);
     s_saiRxIsr(I2S3, s_saiHandle[3][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* I2S3*/
 
 #if defined(I2S4)
+void I2S4_DriverIRQHandler(void);
 void I2S4_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[4][1]) && ((I2S4->RCSR & kSAI_FIFORequestFlag) || (I2S4->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S4->RCSR & kSAI_FIFORequestInterruptEnable) || (I2S4->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[4][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S4, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[4][1]) && ((I2S4->RCSR & kSAI_FIFOWarningFlag) || (I2S4->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S4->RCSR & kSAI_FIFOWarningInterruptEnable) || (I2S4->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[4][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S4, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(I2S4, s_saiHandle[4][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[4][0]) && ((I2S4->TCSR & kSAI_FIFORequestFlag) || (I2S4->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S4->TCSR & kSAI_FIFORequestInterruptEnable) || (I2S4->TCSR & kSAI_FIFOErrorInterruptEnable)))
+
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[4][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S4, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[4][0]) && ((I2S4->TCSR & kSAI_FIFOWarningFlag) || (I2S4->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S4->TCSR & kSAI_FIFOWarningInterruptEnable) || (I2S4->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[4][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S4, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(I2S4, s_saiHandle[4][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S4_Tx_DriverIRQHandler(void);
 void I2S4_Tx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[4][0]);
+    assert(s_saiHandle[4][0] != NULL);
     s_saiTxIsr(I2S4, s_saiHandle[4][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S4_Rx_DriverIRQHandler(void);
 void I2S4_Rx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[4][1]);
+    assert(s_saiHandle[4][1] != NULL);
     s_saiRxIsr(I2S4, s_saiHandle[4][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif
 
 #if defined(FSL_FEATURE_SAI_SAI5_SAI6_SHARE_IRQ) && (FSL_FEATURE_SAI_SAI5_SAI6_SHARE_IRQ) && defined(I2S5) && \
     defined(I2S6)
+void I2S56_DriverIRQHandler(void);
 void I2S56_DriverIRQHandler(void)
 {
     /* use index 5 to get handle when I2S5 & I2S6 share IRQ NUMBER */
     I2S_Type *base = s_saiHandle[5][1]->base;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[5][1]) && base && ((base->RCSR & kSAI_FIFORequestFlag) || (base->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((base->RCSR & kSAI_FIFORequestInterruptEnable) || (base->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[5][1] != NULL) && SAI_RxGetEnabledInterruptStatus(base, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[5][1]) && base && ((base->RCSR & kSAI_FIFOWarningFlag) || (base->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((base->RCSR & kSAI_FIFOWarningInterruptEnable) || (base->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[5][1] != NULL) && SAI_RxGetEnabledInterruptStatus(base, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(base, s_saiHandle[5][1]);
     }
 
     base = s_saiHandle[5][0]->base;
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[5][0]) && base && ((base->TCSR & kSAI_FIFORequestFlag) || (base->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((base->TCSR & kSAI_FIFORequestInterruptEnable) || (base->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[5][0] != NULL) && SAI_TxGetEnabledInterruptStatus(base, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[5][0]) && base && ((base->TCSR & kSAI_FIFOWarningFlag) || (base->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((base->TCSR & kSAI_FIFOWarningInterruptEnable) || (base->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[5][0] != NULL) && SAI_TxGetEnabledInterruptStatus(base, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(base, s_saiHandle[5][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S56_Tx_DriverIRQHandler(void);
 void I2S56_Tx_DriverIRQHandler(void)
 {
     /* use index 5 to get handle when I2S5 & I2S6 share IRQ NUMBER */
-    assert(s_saiHandle[5][0]);
+    assert(s_saiHandle[5][0] != NULL);
     s_saiTxIsr(s_saiHandle[5][0]->base, s_saiHandle[5][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S56_Rx_DriverIRQHandler(void);
 void I2S56_Rx_DriverIRQHandler(void)
 {
     /* use index 5 to get handle when I2S5 & I2S6 share IRQ NUMBER */
-    assert(s_saiHandle[5][1]);
+    assert(s_saiHandle[5][1] != NULL);
     s_saiRxIsr(s_saiHandle[5][1]->base, s_saiHandle[5][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
 #else
 
 #if defined(I2S5)
+void I2S5_DriverIRQHandler(void);
 void I2S5_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[5][1]) && ((I2S5->RCSR & kSAI_FIFORequestFlag) || (I2S5->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S5->RCSR & kSAI_FIFORequestInterruptEnable) || (I2S5->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[5][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S5, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[5][1]) && ((I2S5->RCSR & kSAI_FIFOWarningFlag) || (I2S5->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S5->RCSR & kSAI_FIFOWarningInterruptEnable) || (I2S5->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[5][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S5, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(I2S5, s_saiHandle[5][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[5][0]) && ((I2S5->TCSR & kSAI_FIFORequestFlag) || (I2S5->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S5->TCSR & kSAI_FIFORequestInterruptEnable) || (I2S5->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[5][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S5, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[5][0]) && ((I2S5->TCSR & kSAI_FIFOWarningFlag) || (I2S5->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S5->TCSR & kSAI_FIFOWarningInterruptEnable) || (I2S5->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[5][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S5, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(I2S5, s_saiHandle[5][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S5_Tx_DriverIRQHandler(void);
 void I2S5_Tx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[5][0]);
+    assert(s_saiHandle[5][0] != NULL);
     s_saiTxIsr(I2S5, s_saiHandle[5][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S5_Rx_DriverIRQHandler(void);
 void I2S5_Rx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[5][1]);
+    assert(s_saiHandle[5][1] != NULL);
     s_saiRxIsr(I2S5, s_saiHandle[5][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif
 
 #if defined(I2S6)
+void I2S6_DriverIRQHandler(void);
 void I2S6_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[6][1]) && ((I2S6->RCSR & kSAI_FIFORequestFlag) || (I2S6->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S6->RCSR & kSAI_FIFORequestInterruptEnable) || (I2S6->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[6][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S6, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[6][1]) && ((I2S6->RCSR & kSAI_FIFOWarningFlag) || (I2S6->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S6->RCSR & kSAI_FIFOWarningInterruptEnable) || (I2S6->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[6][1] != NULL) && SAI_RxGetEnabledInterruptStatus(I2S6, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(I2S6, s_saiHandle[6][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[6][0]) && ((I2S6->TCSR & kSAI_FIFORequestFlag) || (I2S6->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S6->TCSR & kSAI_FIFORequestInterruptEnable) || (I2S6->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[6][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S6, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[6][0]) && ((I2S6->TCSR & kSAI_FIFOWarningFlag) || (I2S6->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((I2S6->TCSR & kSAI_FIFOWarningInterruptEnable) || (I2S6->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[6][0] != NULL) && SAI_TxGetEnabledInterruptStatus(I2S6, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(I2S6, s_saiHandle[6][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S6_Tx_DriverIRQHandler(void);
 void I2S6_Tx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[6][0]);
+    assert(s_saiHandle[6][0] != NULL);
     s_saiTxIsr(I2S6, s_saiHandle[6][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void I2S6_Rx_DriverIRQHandler(void);
 void I2S6_Rx_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[6][1]);
+    assert(s_saiHandle[6][1] != NULL);
     s_saiRxIsr(I2S6, s_saiHandle[6][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif
 #endif
 
 #if defined(AUDIO__SAI0)
+void AUDIO_SAI0_INT_DriverIRQHandler(void);
 void AUDIO_SAI0_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[0][1]) &&
-        ((AUDIO__SAI0->RCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI0->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI0->RCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI0->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[0][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI0, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[0][1]) &&
-        ((AUDIO__SAI0->RCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI0->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI0->RCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI0->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[0][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI0, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(AUDIO__SAI0, s_saiHandle[0][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[0][0]) &&
-        ((AUDIO__SAI0->TCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI0->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI0->TCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI0->TCSR & kSAI_FIFOErrorInterruptEnable)))
+
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[0][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI0, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[0][0]) &&
-        ((AUDIO__SAI0->TCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI0->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI0->TCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI0->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[0][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI0, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(AUDIO__SAI0, s_saiHandle[0][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* AUDIO__SAI0 */
 
 #if defined(AUDIO__SAI1)
+void AUDIO_SAI1_INT_DriverIRQHandler(void);
 void AUDIO_SAI1_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) &&
-        ((AUDIO__SAI1->RCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI1->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI1->RCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI1->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI1, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) &&
-        ((AUDIO__SAI1->RCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI1->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI1->RCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI1->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI1, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(AUDIO__SAI1, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) &&
-        ((AUDIO__SAI1->TCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI1->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI1->TCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI1->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI1, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) &&
-        ((AUDIO__SAI1->TCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI1->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI1->TCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI1->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI1, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(AUDIO__SAI1, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* AUDIO__SAI1 */
 
 #if defined(AUDIO__SAI2)
+void AUDIO_SAI2_INT_DriverIRQHandler(void);
 void AUDIO_SAI2_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[2][1]) &&
-        ((AUDIO__SAI2->RCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI2->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI2->RCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI2->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[2][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI2, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[2][1]) &&
-        ((AUDIO__SAI2->RCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI2->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI2->RCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI2->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[2][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI2, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(AUDIO__SAI2, s_saiHandle[2][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[2][0]) &&
-        ((AUDIO__SAI2->TCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI2->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI2->TCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI2->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[2][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI2, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[2][0]) &&
-        ((AUDIO__SAI2->TCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI2->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI2->TCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI2->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[2][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI2, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(AUDIO__SAI2, s_saiHandle[2][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* AUDIO__SAI2 */
 
 #if defined(AUDIO__SAI3)
+void AUDIO_SAI3_INT_DriverIRQHandler(void);
 void AUDIO_SAI3_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[3][1]) &&
-        ((AUDIO__SAI3->RCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI3->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI3->RCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI3->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[3][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI3, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[3][1]) &&
-        ((AUDIO__SAI3->RCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI3->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI3->RCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI3->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[3][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI3, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(AUDIO__SAI3, s_saiHandle[3][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[3][0]) &&
-        ((AUDIO__SAI3->TCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI3->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI3->TCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI3->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[3][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI3, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[3][0]) &&
-        ((AUDIO__SAI3->TCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI3->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI3->TCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI3->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[3][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI3, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(AUDIO__SAI3, s_saiHandle[3][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif
 
 #if defined(AUDIO__SAI6)
+void AUDIO_SAI6_INT_DriverIRQHandler(void);
 void AUDIO_SAI6_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[6][1]) &&
-        ((AUDIO__SAI6->RCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI6->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI6->RCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI6->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[6][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI6, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[6][1]) &&
-        ((AUDIO__SAI6->RCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI6->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI6->RCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI6->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[6][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI6, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(AUDIO__SAI6, s_saiHandle[6][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[6][0]) &&
-        ((AUDIO__SAI6->TCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI6->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI6->TCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI6->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[6][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI6, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[6][0]) &&
-        ((AUDIO__SAI6->TCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI6->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI6->TCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI6->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[6][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI6, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(AUDIO__SAI6, s_saiHandle[6][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* AUDIO__SAI6 */
 
 #if defined(AUDIO__SAI7)
+void AUDIO_SAI7_INT_DriverIRQHandler(void);
 void AUDIO_SAI7_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[7][1]) &&
-        ((AUDIO__SAI7->RCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI7->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI7->RCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI7->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[7][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI7, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[7][1]) &&
-        ((AUDIO__SAI7->RCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI7->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI7->RCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI7->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[7][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(AUDIO__SAI7, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(AUDIO__SAI7, s_saiHandle[7][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[7][0]) &&
-        ((AUDIO__SAI7->TCSR & kSAI_FIFORequestFlag) || (AUDIO__SAI7->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI7->TCSR & kSAI_FIFORequestInterruptEnable) || (AUDIO__SAI7->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[7][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI7, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[7][0]) &&
-        ((AUDIO__SAI7->TCSR & kSAI_FIFOWarningFlag) || (AUDIO__SAI7->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((AUDIO__SAI7->TCSR & kSAI_FIFOWarningInterruptEnable) || (AUDIO__SAI7->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[7][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(AUDIO__SAI7, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(AUDIO__SAI7, s_saiHandle[7][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* AUDIO__SAI7 */
 
 #if defined(ADMA__SAI0)
+void ADMA_SAI0_INT_DriverIRQHandler(void);
 void ADMA_SAI0_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI0->RCSR & kSAI_FIFORequestFlag) || (ADMA__SAI0->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI0->RCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI0->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI0, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI0->RCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI0->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI0->RCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI0->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI0, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(ADMA__SAI0, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI0->TCSR & kSAI_FIFORequestFlag) || (ADMA__SAI0->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI0->TCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI0->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI0, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI0->TCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI0->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI0->TCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI0->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI0, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(ADMA__SAI0, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* ADMA__SAI0 */
 
 #if defined(ADMA__SAI1)
+void ADMA_SAI1_INT_DriverIRQHandler(void);
 void ADMA_SAI1_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI1->RCSR & kSAI_FIFORequestFlag) || (ADMA__SAI1->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI1->RCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI1->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI1, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI1->RCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI1->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI1->RCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI1->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI1, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(ADMA__SAI1, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI1->TCSR & kSAI_FIFORequestFlag) || (ADMA__SAI1->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI1->TCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI1->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI1, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI1->TCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI1->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI1->TCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI1->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI1, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(ADMA__SAI1, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* ADMA__SAI1 */
 
 #if defined(ADMA__SAI2)
+void ADMA_SAI2_INT_DriverIRQHandler(void);
 void ADMA_SAI2_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI2->RCSR & kSAI_FIFORequestFlag) || (ADMA__SAI2->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI2->RCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI2->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI2, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI2->RCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI2->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI2->RCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI2->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI2, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(ADMA__SAI2, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI2->TCSR & kSAI_FIFORequestFlag) || (ADMA__SAI2->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI2->TCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI2->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI2, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI2->TCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI2->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI2->TCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI2->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI2, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(ADMA__SAI2, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* ADMA__SAI2 */
 
 #if defined(ADMA__SAI3)
+void ADMA_SAI3_INT_DriverIRQHandler(void);
 void ADMA_SAI3_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI3->RCSR & kSAI_FIFORequestFlag) || (ADMA__SAI3->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI3->RCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI3->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI3, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI3->RCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI3->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI3->RCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI3->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI3, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(ADMA__SAI3, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI3->TCSR & kSAI_FIFORequestFlag) || (ADMA__SAI3->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI3->TCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI3->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI3, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI3->TCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI3->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI3->TCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI3->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI3, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(ADMA__SAI3, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* ADMA__SAI3 */
 
 #if defined(ADMA__SAI4)
+void ADMA_SAI4_INT_DriverIRQHandler(void);
 void ADMA_SAI4_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI4->RCSR & kSAI_FIFORequestFlag) || (ADMA__SAI4->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI4->RCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI4->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI4, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI4->RCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI4->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI4->RCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI4->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI4, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(ADMA__SAI4, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI4->TCSR & kSAI_FIFORequestFlag) || (ADMA__SAI4->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI4->TCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI4->TCSR & kSAI_FIFOErrorInterruptEnable)))
+
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI4, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI4->TCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI4->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI4->TCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI4->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI4, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(ADMA__SAI4, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* ADMA__SAI4 */
 
 #if defined(ADMA__SAI5)
+void ADMA_SAI5_INT_DriverIRQHandler(void);
 void ADMA_SAI5_INT_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI5->RCSR & kSAI_FIFORequestFlag) || (ADMA__SAI5->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI5->RCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI5->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI5, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) && ((ADMA__SAI5->RCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI5->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI5->RCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI5->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) &&
+        SAI_RxGetEnabledInterruptStatus(ADMA__SAI5, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(ADMA__SAI5, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI5->TCSR & kSAI_FIFORequestFlag) || (ADMA__SAI5->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI5->TCSR & kSAI_FIFORequestInterruptEnable) || (ADMA__SAI5->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI5, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) && ((ADMA__SAI5->TCSR & kSAI_FIFOWarningFlag) || (ADMA__SAI5->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((ADMA__SAI5->TCSR & kSAI_FIFOWarningInterruptEnable) || (ADMA__SAI5->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) &&
+        SAI_TxGetEnabledInterruptStatus(ADMA__SAI5, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                        (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(ADMA__SAI5, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* ADMA__SAI5 */
 
 #if defined(SAI0)
+void SAI0_DriverIRQHandler(void);
 void SAI0_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[0][1]) && ((SAI0->RCSR & kSAI_FIFORequestFlag) || (SAI0->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI0->RCSR & kSAI_FIFORequestInterruptEnable) || (SAI0->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[0][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI0, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[0][1]) && ((SAI0->RCSR & kSAI_FIFOWarningFlag) || (SAI0->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI0->RCSR & kSAI_FIFOWarningInterruptEnable) || (SAI0->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[0][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI0, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(SAI0, s_saiHandle[0][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[0][0]) && ((SAI0->TCSR & kSAI_FIFORequestFlag) || (SAI0->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI0->TCSR & kSAI_FIFORequestInterruptEnable) || (SAI0->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[0][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI0, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[0][0]) && ((SAI0->TCSR & kSAI_FIFOWarningFlag) || (SAI0->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI0->TCSR & kSAI_FIFOWarningInterruptEnable) || (SAI0->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[0][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI0, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
-        s_saiTxIsr(AUDIO__SAI0, s_saiHandle[0][0]);
+        s_saiTxIsr(SAI0, s_saiHandle[0][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* SAI0 */
 
 #if defined(SAI1)
+void SAI1_DriverIRQHandler(void);
 void SAI1_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][1]) && ((SAI1->RCSR & kSAI_FIFORequestFlag) || (SAI1->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI1->RCSR & kSAI_FIFORequestInterruptEnable) || (SAI1->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI1, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][1]) && ((SAI1->RCSR & kSAI_FIFOWarningFlag) || (SAI1->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI1->RCSR & kSAI_FIFOWarningInterruptEnable) || (SAI1->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI1, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(SAI1, s_saiHandle[1][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[1][0]) && ((SAI1->TCSR & kSAI_FIFORequestFlag) || (SAI1->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI1->TCSR & kSAI_FIFORequestInterruptEnable) || (SAI1->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[1][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI1, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[1][0]) && ((SAI1->TCSR & kSAI_FIFOWarningFlag) || (SAI1->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI1->TCSR & kSAI_FIFOWarningInterruptEnable) || (SAI1->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[1][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI1, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(SAI1, s_saiHandle[1][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* SAI1 */
 
 #if defined(SAI2)
+void SAI2_DriverIRQHandler(void);
 void SAI2_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[2][1]) && ((SAI2->RCSR & kSAI_FIFORequestFlag) || (SAI2->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI2->RCSR & kSAI_FIFORequestInterruptEnable) || (SAI2->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[2][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI2, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[2][1]) && ((SAI2->RCSR & kSAI_FIFOWarningFlag) || (SAI2->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI2->RCSR & kSAI_FIFOWarningInterruptEnable) || (SAI2->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[2][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI2, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(SAI2, s_saiHandle[2][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[2][0]) && ((SAI2->TCSR & kSAI_FIFORequestFlag) || (SAI2->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI2->TCSR & kSAI_FIFORequestInterruptEnable) || (SAI2->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[2][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI2, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[2][0]) && ((SAI2->TCSR & kSAI_FIFOWarningFlag) || (SAI2->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI2->TCSR & kSAI_FIFOWarningInterruptEnable) || (SAI2->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[2][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI2, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(SAI2, s_saiHandle[2][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* SAI2 */
 
 #if defined(SAI3)
+void SAI3_DriverIRQHandler(void);
 void SAI3_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[3][1]) && ((SAI3->RCSR & kSAI_FIFORequestFlag) || (SAI3->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI3->RCSR & kSAI_FIFORequestInterruptEnable) || (SAI3->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[3][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI3, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[3][1]) && ((SAI3->RCSR & kSAI_FIFOWarningFlag) || (SAI3->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI3->RCSR & kSAI_FIFOWarningInterruptEnable) || (SAI3->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[3][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI3, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(SAI3, s_saiHandle[3][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[3][0]) && ((SAI3->TCSR & kSAI_FIFORequestFlag) || (SAI3->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI3->TCSR & kSAI_FIFORequestInterruptEnable) || (SAI3->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[3][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI3, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[3][0]) && ((SAI3->TCSR & kSAI_FIFOWarningFlag) || (SAI3->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI3->TCSR & kSAI_FIFOWarningInterruptEnable) || (SAI3->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[3][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI3, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(SAI3, s_saiHandle[3][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void SAI3_TX_DriverIRQHandler(void);
 void SAI3_TX_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[3][0]);
+    assert(s_saiHandle[3][0] != NULL);
     s_saiTxIsr(SAI3, s_saiHandle[3][0]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+void SAI3_RX_DriverIRQHandler(void);
 void SAI3_RX_DriverIRQHandler(void)
 {
-    assert(s_saiHandle[3][1]);
+    assert(s_saiHandle[3][1] != NULL);
     s_saiRxIsr(SAI3, s_saiHandle[3][1]);
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* SAI3 */
 
 #if defined(SAI4)
+void SAI4_DriverIRQHandler(void);
 void SAI4_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[4][1]) && ((SAI4->RCSR & kSAI_FIFORequestFlag) || (SAI4->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI4->RCSR & kSAI_FIFORequestInterruptEnable) || (SAI4->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[4][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI4, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[4][1]) && ((SAI4->RCSR & kSAI_FIFOWarningFlag) || (SAI4->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI4->RCSR & kSAI_FIFOWarningInterruptEnable) || (SAI4->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[4][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI4, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(SAI4, s_saiHandle[4][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[4][0]) && ((SAI4->TCSR & kSAI_FIFORequestFlag) || (SAI4->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI4->TCSR & kSAI_FIFORequestInterruptEnable) || (SAI4->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[4][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI4, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[4][0]) && ((SAI4->TCSR & kSAI_FIFOWarningFlag) || (SAI4->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI4->TCSR & kSAI_FIFOWarningInterruptEnable) || (SAI4->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[4][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI4, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(SAI4, s_saiHandle[4][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* SAI4 */
 
 #if defined(SAI5)
+void SAI5_DriverIRQHandler(void);
 void SAI5_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[5][1]) && ((SAI5->RCSR & kSAI_FIFORequestFlag) || (SAI5->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI5->RCSR & kSAI_FIFORequestInterruptEnable) || (SAI5->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[5][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI5, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[5][1]) && ((SAI5->RCSR & kSAI_FIFOWarningFlag) || (SAI5->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI5->RCSR & kSAI_FIFOWarningInterruptEnable) || (SAI5->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[5][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI5, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(SAI5, s_saiHandle[5][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[5][0]) && ((SAI5->TCSR & kSAI_FIFORequestFlag) || (SAI5->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI5->TCSR & kSAI_FIFORequestInterruptEnable) || (SAI5->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[5][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI5, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[5][0]) && ((SAI5->TCSR & kSAI_FIFOWarningFlag) || (SAI5->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI5->TCSR & kSAI_FIFOWarningInterruptEnable) || (SAI5->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[5][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI5, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(SAI5, s_saiHandle[5][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* SAI5 */
 
 #if defined(SAI6)
+void SAI6_DriverIRQHandler(void);
 void SAI6_DriverIRQHandler(void)
 {
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[6][1]) && ((SAI6->RCSR & kSAI_FIFORequestFlag) || (SAI6->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI6->RCSR & kSAI_FIFORequestInterruptEnable) || (SAI6->RCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[6][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI6, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[6][1]) && ((SAI6->RCSR & kSAI_FIFOWarningFlag) || (SAI6->RCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI6->RCSR & kSAI_FIFOWarningInterruptEnable) || (SAI6->RCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[6][1] != NULL) && SAI_RxGetEnabledInterruptStatus(SAI6, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiRxIsr(SAI6, s_saiHandle[6][1]);
     }
-#if defined(FSL_FEATURE_SAI_FIFO_COUNT) && (FSL_FEATURE_SAI_FIFO_COUNT > 1)
-    if ((s_saiHandle[6][0]) && ((SAI6->TCSR & kSAI_FIFORequestFlag) || (SAI6->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI6->TCSR & kSAI_FIFORequestInterruptEnable) || (SAI6->TCSR & kSAI_FIFOErrorInterruptEnable)))
+#if defined(FSL_FEATURE_SAI_HAS_FIFO) && (FSL_FEATURE_SAI_HAS_FIFO)
+    if ((s_saiHandle[6][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI6, (I2S_TCSR_FRIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FRF_MASK | I2S_TCSR_FEF_MASK)))
 #else
-    if ((s_saiHandle[6][0]) && ((SAI6->TCSR & kSAI_FIFOWarningFlag) || (SAI6->TCSR & kSAI_FIFOErrorFlag)) &&
-        ((SAI6->TCSR & kSAI_FIFOWarningInterruptEnable) || (SAI6->TCSR & kSAI_FIFOErrorInterruptEnable)))
+    if ((s_saiHandle[6][0] != NULL) && SAI_TxGetEnabledInterruptStatus(SAI6, (I2S_TCSR_FWIE_MASK | I2S_TCSR_FEIE_MASK),
+                                                                       (I2S_TCSR_FWF_MASK | I2S_TCSR_FEF_MASK)))
 #endif
     {
         s_saiTxIsr(SAI6, s_saiHandle[6][0]);
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 #endif /* SAI6 */

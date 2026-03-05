@@ -6,8 +6,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _FSL_DMAMUX_H_
-#define _FSL_DMAMUX_H_
+#ifndef FSL_DMAMUX_H_
+#define FSL_DMAMUX_H_
 
 #include "fsl_common.h"
 
@@ -21,11 +21,21 @@
  ******************************************************************************/
 
 /*! @name Driver version */
-/*@{*/
-/*! @brief DMAMUX driver version 2.0.3. */
-#define FSL_DMAMUX_DRIVER_VERSION (MAKE_VERSION(2, 0, 3))
-/*@}*/
+/*! @{ */
+/*! @brief DMAMUX driver version 2.1.1. */
+#define FSL_DMAMUX_DRIVER_VERSION (MAKE_VERSION(2, 1, 3))
+/*! @} */
 
+#if (defined(FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT) && FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT)
+/*!@brief Macro used for dmamux channel endian convert. */
+#define DMAMUX_CHANNEL_ENDIAN_CONVERTn(channel) (channel ^ 3U)
+#endif
+
+#if (defined(FSL_FEATURE_EDMA_MODULE_CHANNEL) && \
+     (FSL_FEATURE_EDMA_MODULE_CHANNEL != FSL_FEATURE_DMAMUX_MODULE_CHANNEL))
+/*!@brief Macro used for dmamux channel number canculate. */
+#define FSL_DMAMUX_CHANNEL_NUM(channel) ((channel) %  FSL_FEATURE_DMAMUX_MODULE_CHANNEL)
+#endif
 /*******************************************************************************
  * API
  ******************************************************************************/
@@ -58,7 +68,7 @@ void DMAMUX_Init(DMAMUX_Type *base);
  */
 void DMAMUX_Deinit(DMAMUX_Type *base);
 
-/* @} */
+/*! @} */
 /*!
  * @name DMAMUX Channel Operation
  * @{
@@ -74,7 +84,16 @@ void DMAMUX_Deinit(DMAMUX_Type *base);
  */
 static inline void DMAMUX_EnableChannel(DMAMUX_Type *base, uint32_t channel)
 {
-    assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+#if (defined(FSL_FEATURE_EDMA_MODULE_CHANNEL) && \
+     (FSL_FEATURE_EDMA_MODULE_CHANNEL != FSL_FEATURE_DMAMUX_MODULE_CHANNEL))
+    channel = FSL_DMAMUX_CHANNEL_NUM(channel);
+#endif
+
+assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+
+#if (defined(FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT) && FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT)
+    channel = DMAMUX_CHANNEL_ENDIAN_CONVERTn(channel);
+#endif
 
     base->CHCFG[channel] |= DMAMUX_CHCFG_ENBL_MASK;
 }
@@ -90,9 +109,23 @@ static inline void DMAMUX_EnableChannel(DMAMUX_Type *base, uint32_t channel)
  */
 static inline void DMAMUX_DisableChannel(DMAMUX_Type *base, uint32_t channel)
 {
-    assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
 
+#if (defined(FSL_FEATURE_EDMA_MODULE_CHANNEL) && \
+     (FSL_FEATURE_EDMA_MODULE_CHANNEL != FSL_FEATURE_DMAMUX_MODULE_CHANNEL))
+    channel = FSL_DMAMUX_CHANNEL_NUM(channel);
+#endif
+
+assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+
+#if (defined(FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT) && FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT)
+    channel = DMAMUX_CHANNEL_ENDIAN_CONVERTn(channel);
+#endif
+
+#if defined FSL_FEATURE_DMAMUX_CHCFG_REGISTER_WIDTH && (FSL_FEATURE_DMAMUX_CHCFG_REGISTER_WIDTH == 32U)
+    base->CHCFG[channel] &= ~DMAMUX_CHCFG_ENBL_MASK;
+#else
     base->CHCFG[channel] &= ~(uint8_t)DMAMUX_CHCFG_ENBL_MASK;
+#endif
 }
 
 /*!
@@ -100,13 +133,28 @@ static inline void DMAMUX_DisableChannel(DMAMUX_Type *base, uint32_t channel)
  *
  * @param base DMAMUX peripheral base address.
  * @param channel DMAMUX channel number.
- * @param source Channel source, which is used to trigger the DMA transfer.
+ * @param source Channel source, which is used to trigger the DMA transfer.User need to use the 
+ *               dma_request_source_t type as the input parameter.
  */
-static inline void DMAMUX_SetSource(DMAMUX_Type *base, uint32_t channel, uint32_t source)
+static inline void DMAMUX_SetSource(DMAMUX_Type *base, uint32_t channel, int32_t source)
 {
-    assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
 
+#if (defined(FSL_FEATURE_EDMA_MODULE_CHANNEL) && \
+     (FSL_FEATURE_EDMA_MODULE_CHANNEL != FSL_FEATURE_DMAMUX_MODULE_CHANNEL))
+    channel = FSL_DMAMUX_CHANNEL_NUM(channel);
+#endif
+
+assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+
+#if (defined(FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT) && FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT)
+    channel = DMAMUX_CHANNEL_ENDIAN_CONVERTn(channel);
+#endif
+
+#if defined FSL_FEATURE_DMAMUX_CHCFG_REGISTER_WIDTH && (FSL_FEATURE_DMAMUX_CHCFG_REGISTER_WIDTH == 32U)
+    base->CHCFG[channel] = ((base->CHCFG[channel] & ~DMAMUX_CHCFG_SOURCE_MASK) | DMAMUX_CHCFG_SOURCE(source));
+#else
     base->CHCFG[channel] = (uint8_t)((base->CHCFG[channel] & ~DMAMUX_CHCFG_SOURCE_MASK) | DMAMUX_CHCFG_SOURCE(source));
+#endif
 }
 
 #if defined(FSL_FEATURE_DMAMUX_HAS_TRIG) && FSL_FEATURE_DMAMUX_HAS_TRIG > 0U
@@ -120,7 +168,17 @@ static inline void DMAMUX_SetSource(DMAMUX_Type *base, uint32_t channel, uint32_
  */
 static inline void DMAMUX_EnablePeriodTrigger(DMAMUX_Type *base, uint32_t channel)
 {
-    assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+
+#if (defined(FSL_FEATURE_EDMA_MODULE_CHANNEL) && \
+     (FSL_FEATURE_EDMA_MODULE_CHANNEL != FSL_FEATURE_DMAMUX_MODULE_CHANNEL))
+    channel = FSL_DMAMUX_CHANNEL_NUM(channel);
+#endif
+
+assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+
+#if (defined(FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT) && FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT)
+    channel = DMAMUX_CHANNEL_ENDIAN_CONVERTn(channel);
+#endif
 
     base->CHCFG[channel] |= DMAMUX_CHCFG_TRIG_MASK;
 }
@@ -135,9 +193,23 @@ static inline void DMAMUX_EnablePeriodTrigger(DMAMUX_Type *base, uint32_t channe
  */
 static inline void DMAMUX_DisablePeriodTrigger(DMAMUX_Type *base, uint32_t channel)
 {
-    assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
 
+#if (defined(FSL_FEATURE_EDMA_MODULE_CHANNEL) && \
+     (FSL_FEATURE_EDMA_MODULE_CHANNEL != FSL_FEATURE_DMAMUX_MODULE_CHANNEL))
+    channel = FSL_DMAMUX_CHANNEL_NUM(channel);
+#endif
+
+assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+
+#if (defined(FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT) && FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT)
+    channel = DMAMUX_CHANNEL_ENDIAN_CONVERTn(channel);
+#endif
+
+#if defined FSL_FEATURE_DMAMUX_CHCFG_REGISTER_WIDTH && (FSL_FEATURE_DMAMUX_CHCFG_REGISTER_WIDTH == 32U)
+    base->CHCFG[channel] &= ~DMAMUX_CHCFG_TRIG_MASK;
+#else
     base->CHCFG[channel] &= ~(uint8_t)DMAMUX_CHCFG_TRIG_MASK;
+#endif
 }
 #endif /* FSL_FEATURE_DMAMUX_HAS_TRIG */
 
@@ -153,7 +225,17 @@ static inline void DMAMUX_DisablePeriodTrigger(DMAMUX_Type *base, uint32_t chann
  */
 static inline void DMAMUX_EnableAlwaysOn(DMAMUX_Type *base, uint32_t channel, bool enable)
 {
-    assert(channel < FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+
+#if (defined(FSL_FEATURE_EDMA_MODULE_CHANNEL) && \
+     (FSL_FEATURE_EDMA_MODULE_CHANNEL != FSL_FEATURE_DMAMUX_MODULE_CHANNEL))
+    channel = FSL_DMAMUX_CHANNEL_NUM(channel);
+#endif
+
+assert(channel < (uint32_t)FSL_FEATURE_DMAMUX_MODULE_CHANNEL);
+
+#if (defined(FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT) && FSL_FEATURE_DMAMUX_CHANNEL_NEEDS_ENDIAN_CONVERT)
+    channel = DMAMUX_CHANNEL_ENDIAN_CONVERTn(channel);
+#endif
 
     if (enable)
     {
@@ -166,12 +248,12 @@ static inline void DMAMUX_EnableAlwaysOn(DMAMUX_Type *base, uint32_t channel, bo
 }
 #endif /* FSL_FEATURE_DMAMUX_HAS_A_ON */
 
-/* @} */
+/*! @} */
 
 #if defined(__cplusplus)
 }
 #endif /* __cplusplus */
 
-/* @} */
+/*! @} */
 
-#endif /* _FSL_DMAMUX_H_ */
+#endif /* FSL_DMAMUX_H_ */

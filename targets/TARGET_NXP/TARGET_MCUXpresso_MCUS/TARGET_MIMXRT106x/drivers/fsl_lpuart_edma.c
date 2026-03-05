@@ -1,13 +1,23 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2018 NXP
+ * Copyright 2016-2022, 2025 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include "fsl_lpuart_edma.h"
-
+/*
+ * $Coverage Justification Reference$
+ *
+ * $Justification fsl_lpuart_edma_c_ref_1$
+ * The EDMA handle is only used by the LPUART EDMA driver, with the LPUART EDMA driver workflow,
+ * the callback is only called when EDMA transfer done.
+ *
+ * $Justification fsl_lpuart_edma_c_ref_2$
+ * This function only handles the kLPUART_TransmissionCompleteFlag event.
+ *
+ */
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -25,7 +35,7 @@ typedef struct _lpuart_edma_private_handle
 } lpuart_edma_private_handle_t;
 
 /* LPUART EDMA transfer handle. */
-enum _lpuart_edma_tansfer_states
+enum
 {
     kLPUART_TxIdle, /* TX idle. */
     kLPUART_TxBusy, /* TX busy. */
@@ -36,48 +46,11 @@ enum _lpuart_edma_tansfer_states
 /*******************************************************************************
  * Variables
  ******************************************************************************/
-
-/* Array of LPUART handle. */
-#if (defined(LPUART8))
-#define LPUART_HANDLE_ARRAY_SIZE 9
-#else /* LPUART8 */
-#if (defined(LPUART7))
-#define LPUART_HANDLE_ARRAY_SIZE 8
-#else /* LPUART7 */
-#if (defined(LPUART6))
-#define LPUART_HANDLE_ARRAY_SIZE 7
-#else /* LPUART6 */
-#if (defined(LPUART5))
-#define LPUART_HANDLE_ARRAY_SIZE 6
-#else /* LPUART5 */
-#if (defined(LPUART4))
-#define LPUART_HANDLE_ARRAY_SIZE 5
-#else /* LPUART4 */
-#if (defined(LPUART3))
-#define LPUART_HANDLE_ARRAY_SIZE 4
-#else /* LPUART3 */
-#if (defined(LPUART2))
-#define LPUART_HANDLE_ARRAY_SIZE 3
-#else /* LPUART2 */
-#if (defined(LPUART1))
-#define LPUART_HANDLE_ARRAY_SIZE 2
-#else /* LPUART1 */
-#if (defined(LPUART0))
-#define LPUART_HANDLE_ARRAY_SIZE 1
-#else /* LPUART0 */
-#define LPUART_HANDLE_ARRAY_SIZE FSL_FEATURE_SOC_LPUART_COUNT
-#endif /* LPUART 0 */
-#endif /* LPUART 1 */
-#endif /* LPUART 2 */
-#endif /* LPUART 3 */
-#endif /* LPUART 4 */
-#endif /* LPUART 5 */
-#endif /* LPUART 6 */
-#endif /* LPUART 7 */
-#endif /* LPUART 8 */
+/* Array of LPUART peripheral base address. */
+static LPUART_Type *const s_lpuartBases[] = LPUART_BASE_PTRS;
 
 /*<! Private handle only used for internally. */
-static lpuart_edma_private_handle_t s_lpuartEdmaPrivateHandle[LPUART_HANDLE_ARRAY_SIZE];
+static lpuart_edma_private_handle_t s_lpuartEdmaPrivateHandle[ARRAY_SIZE(s_lpuartBases)];
 
 /*******************************************************************************
  * Prototypes
@@ -118,16 +91,20 @@ static void LPUART_SendEDMACallback(edma_handle_t *handle, void *param, bool tra
     /* Avoid the warning for unused variables. */
     handle = handle;
     tcds   = tcds;
-
-    if (transferDone)
+    /*
+     * $Branch Coverage Justification$
+     * $ref fsl_lpuart_edma_c_ref_1$
+     */
+    if (transferDone) /* GCOVR_EXCL_BR_LINE */
     {
-        LPUART_TransferAbortSendEDMA(lpuartPrivateHandle->base, lpuartPrivateHandle->handle);
+        /* Disable LPUART TX EDMA. */
+        LPUART_EnableTxDMA(lpuartPrivateHandle->base, false);
 
-        if (NULL != lpuartPrivateHandle->handle->callback)
-        {
-            lpuartPrivateHandle->handle->callback(lpuartPrivateHandle->base, lpuartPrivateHandle->handle,
-                                                  kStatus_LPUART_TxIdle, lpuartPrivateHandle->handle->userData);
-        }
+        /* Stop transfer. */
+        EDMA_AbortTransfer(handle);
+
+        /* Enable tx complete interrupt */
+        LPUART_EnableInterrupts(lpuartPrivateHandle->base, (uint32_t)kLPUART_TransmissionCompleteInterruptEnable);
     }
 }
 
@@ -140,8 +117,11 @@ static void LPUART_ReceiveEDMACallback(edma_handle_t *handle, void *param, bool 
     /* Avoid warning for unused parameters. */
     handle = handle;
     tcds   = tcds;
-
-    if (transferDone)
+    /*
+     * $Branch Coverage Justification$
+     * $ref fsl_lpuart_edma_c_ref_1$
+     */
+    if (transferDone) /* GCOVR_EXCL_BR_LINE */
     {
         /* Disable transfer. */
         LPUART_TransferAbortReceiveEDMA(lpuartPrivateHandle->base, lpuartPrivateHandle->handle);
@@ -156,6 +136,9 @@ static void LPUART_ReceiveEDMACallback(edma_handle_t *handle, void *param, bool 
 
 /*!
  * brief Initializes the LPUART handle which is used in transactional functions.
+ *
+ * note This function disables all LPUART interrupts.
+ *
  * param base LPUART peripheral base address.
  * param handle Pointer to lpuart_edma_handle_t structure.
  * param callback Callback function.
@@ -201,6 +184,19 @@ void LPUART_TransferCreateHandleEDMA(LPUART_Type *base,
     {
         base->WATER &= (~LPUART_WATER_RXWATER_MASK);
     }
+#endif
+
+    /* Save the handle in global variables to support the double weak mechanism. */
+    s_lpuartHandle[instance] = handle;
+    /* Set LPUART_TransferEdmaHandleIRQ as DMA IRQ handler */
+    s_lpuartIsr[instance] = LPUART_TransferEdmaHandleIRQ;
+    /* Disable all LPUART internal interrupts */
+    LPUART_DisableInterrupts(base, (uint32_t)kLPUART_AllInterruptEnable);
+    /* Enable interrupt in NVIC. */
+#if defined(FSL_FEATURE_LPUART_HAS_SEPARATE_RX_TX_IRQ) && FSL_FEATURE_LPUART_HAS_SEPARATE_RX_TX_IRQ
+    (void)EnableIRQ(s_lpuartTxIRQ[instance]);
+#else
+    (void)EnableIRQ(s_lpuartIRQ[instance]);
 #endif
 
     /* Configure TX. */
@@ -436,4 +432,38 @@ status_t LPUART_TransferGetSendCountEDMA(LPUART_Type *base, lpuart_edma_handle_t
               EDMA_GetRemainingMajorLoopCount(handle->txEdmaHandle->base, handle->txEdmaHandle->channel));
 
     return kStatus_Success;
+}
+
+/*!
+ * brief LPUART eDMA IRQ handle function.
+ *
+ * This function handles the LPUART tx complete IRQ request and invoke user callback.
+ * It is not set to static so that it can be used in user application.
+ * note This function is used as default IRQ handler by double weak mechanism.
+ * If user's specific IRQ handler is implemented, make sure this function is invoked in the handler.
+ *
+ * param base LPUART peripheral base address.
+ * param lpuartEdmaHandle LPUART handle pointer.
+ */
+void LPUART_TransferEdmaHandleIRQ(LPUART_Type *base, void *lpuartEdmaHandle)
+{
+    assert(lpuartEdmaHandle != NULL);
+    /*
+     * $Branch Coverage Justification$
+     * $ref fsl_lpuart_edma_c_ref_2$
+     */
+    if (((uint32_t)kLPUART_TransmissionCompleteFlag & LPUART_GetStatusFlags(base)) != 0U) /* GCOVR_EXCL_BR_LINE */
+    {
+        lpuart_edma_handle_t *handle = (lpuart_edma_handle_t *)lpuartEdmaHandle;
+
+        /* Disable tx complete interrupt */
+        LPUART_DisableInterrupts(base, (uint32_t)kLPUART_TransmissionCompleteInterruptEnable);
+
+        handle->txState = (uint8_t)kLPUART_TxIdle;
+
+        if (handle->callback != NULL)
+        {
+            handle->callback(base, handle, kStatus_LPUART_TxIdle, handle->userData);
+        }
+    }
 }

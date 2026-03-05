@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2020, 2024-2025 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -19,6 +19,12 @@
 
 /*< @brief user configurable flexio handle count. */
 #define FLEXIO_HANDLE_COUNT 2
+
+#if defined(FLEXIO_RSTS)
+#define FLEXIO_RESETS_ARRAY FLEXIO_RSTS
+#elif defined(FLEXIO_RSTS_N)
+#define FLEXIO_RESETS_ARRAY FLEXIO_RSTS_N
+#endif
 
 /*******************************************************************************
  * Variables
@@ -40,6 +46,14 @@ static void *s_flexioType[FLEXIO_HANDLE_COUNT];
 /*< @brief pointer to array of FLEXIO Isr. */
 static flexio_isr_t s_flexioIsr[FLEXIO_HANDLE_COUNT];
 
+/* FlexIO common IRQ Handler. */
+static void FLEXIO_CommonIRQHandler(void);
+
+#if defined(FLEXIO_RESETS_ARRAY)
+/* Reset array */
+static const reset_ip_name_t s_flexioResets[] = FLEXIO_RESETS_ARRAY;
+#endif
+
 /*******************************************************************************
  * Codes
  ******************************************************************************/
@@ -54,9 +68,18 @@ uint32_t FLEXIO_GetInstance(FLEXIO_Type *base)
     uint32_t instance;
 
     /* Find the instance index from base address mappings. */
-    for (instance = 0; instance < ARRAY_SIZE(s_flexioBases); instance++)
+    /*
+     * $Branch Coverage Justification$
+     * (instance >= ARRAY_SIZE(s_flexioBases)) not covered. The peripheral base
+     * address is always valid and checked by assert.
+     */
+    for (instance = 0; instance < ARRAY_SIZE(s_flexioBases); instance++) /* GCOVR_EXCL_BR_LINE */
     {
-        if (s_flexioBases[instance] == base)
+        /*
+         * $Branch Coverage Justification$
+         * false branch not covered - depends on count of peripheral instances
+         */
+        if (MSDK_REG_SECURE_ADDR(s_flexioBases[instance]) == MSDK_REG_SECURE_ADDR(base)) /* GCOVR_EXCL_BR_LINE */
         {
             break;
         }
@@ -93,16 +116,26 @@ void FLEXIO_Init(FLEXIO_Type *base, const flexio_config_t *userConfig)
     CLOCK_EnableClock(s_flexioClocks[FLEXIO_GetInstance(base)]);
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
 
+#if defined(FLEXIO_RESETS_ARRAY)
+    RESET_ReleasePeripheralReset(s_flexioResets[FLEXIO_GetInstance(base)]);
+#endif
+
     FLEXIO_Reset(base);
 
     ctrlReg = base->CTRL;
+#if !(defined(FSL_FEATURE_FLEXIO_HAS_DOZE_MODE_SUPPORT) && (FSL_FEATURE_FLEXIO_HAS_DOZE_MODE_SUPPORT == 0))
     ctrlReg &= ~(FLEXIO_CTRL_DOZEN_MASK | FLEXIO_CTRL_DBGE_MASK | FLEXIO_CTRL_FASTACC_MASK | FLEXIO_CTRL_FLEXEN_MASK);
-    ctrlReg |= (FLEXIO_CTRL_DBGE(userConfig->enableInDebug) | FLEXIO_CTRL_FASTACC(userConfig->enableFastAccess) |
-                FLEXIO_CTRL_FLEXEN(userConfig->enableFlexio));
+#else
+    ctrlReg &= ~(FLEXIO_CTRL_DBGE_MASK | FLEXIO_CTRL_FASTACC_MASK | FLEXIO_CTRL_FLEXEN_MASK);
+#endif
+    ctrlReg |= (FLEXIO_CTRL_DBGE(userConfig->enableInDebug ? 1U : 0U) | FLEXIO_CTRL_FASTACC(userConfig->enableFastAccess ? 1U : 0U) |
+                FLEXIO_CTRL_FLEXEN(userConfig->enableFlexio ? 1U : 0U));
+#if !(defined(FSL_FEATURE_FLEXIO_HAS_DOZE_MODE_SUPPORT) && (FSL_FEATURE_FLEXIO_HAS_DOZE_MODE_SUPPORT == 0))
     if (!userConfig->enableInDoze)
     {
         ctrlReg |= FLEXIO_CTRL_DOZEN_MASK;
     }
+#endif
 
     base->CTRL = ctrlReg;
 }
@@ -136,13 +169,15 @@ void FLEXIO_Deinit(FLEXIO_Type *base)
 */
 void FLEXIO_GetDefaultConfig(flexio_config_t *userConfig)
 {
-    assert(userConfig);
+    assert(userConfig != NULL);
 
     /* Initializes the configure structure to zero. */
-    memset(userConfig, 0, sizeof(*userConfig));
+    (void)memset(userConfig, 0, sizeof(*userConfig));
 
     userConfig->enableFlexio     = true;
+#if !(defined(FSL_FEATURE_FLEXIO_HAS_DOZE_MODE_SUPPORT) && (FSL_FEATURE_FLEXIO_HAS_DOZE_MODE_SUPPORT == 0))
     userConfig->enableInDoze     = false;
+#endif
     userConfig->enableInDebug    = true;
     userConfig->enableFastAccess = false;
 }
@@ -210,6 +245,7 @@ uint32_t FLEXIO_GetShifterBufferAddress(FLEXIO_Type *base, flexio_shifter_buffer
 
 #endif
         default:
+            address = (uint32_t) & (base->SHIFTBUF[index]);
             break;
     }
     return address;
@@ -313,14 +349,14 @@ void FLEXIO_SetTimerConfig(FLEXIO_Type *base, uint8_t index, const flexio_timer_
  */
 status_t FLEXIO_RegisterHandleIRQ(void *base, void *handle, flexio_isr_t isr)
 {
-    assert(base);
-    assert(handle);
-    assert(isr);
+    assert(base != NULL);
+    assert(handle != NULL);
+    assert(isr != NULL);
 
-    uint8_t index = 0;
+    uint8_t index;
 
     /* Find the an empty handle pointer to store the handle. */
-    for (index = 0; index < FLEXIO_HANDLE_COUNT; index++)
+    for (index = 0U; index < (uint8_t)FLEXIO_HANDLE_COUNT; index++)
     {
         if (s_flexioHandle[index] == NULL)
         {
@@ -332,7 +368,7 @@ status_t FLEXIO_RegisterHandleIRQ(void *base, void *handle, flexio_isr_t isr)
         }
     }
 
-    if (index == FLEXIO_HANDLE_COUNT)
+    if (index == (uint8_t)FLEXIO_HANDLE_COUNT)
     {
         return kStatus_OutOfRange;
     }
@@ -351,12 +387,12 @@ status_t FLEXIO_RegisterHandleIRQ(void *base, void *handle, flexio_isr_t isr)
  */
 status_t FLEXIO_UnregisterHandleIRQ(void *base)
 {
-    assert(base);
+    assert(base != NULL);
 
-    uint8_t index = 0;
+    uint8_t index;
 
     /* Find the index from base address mappings. */
-    for (index = 0; index < FLEXIO_HANDLE_COUNT; index++)
+    for (index = 0U; index < (uint8_t)FLEXIO_HANDLE_COUNT; index++)
     {
         if (s_flexioType[index] == base)
         {
@@ -368,7 +404,7 @@ status_t FLEXIO_UnregisterHandleIRQ(void *base)
         }
     }
 
-    if (index == FLEXIO_HANDLE_COUNT)
+    if (index == (uint8_t)FLEXIO_HANDLE_COUNT)
     {
         return kStatus_OutOfRange;
     }
@@ -378,49 +414,118 @@ status_t FLEXIO_UnregisterHandleIRQ(void *base)
     }
 }
 
-void FLEXIO_CommonIRQHandler(void)
+static void FLEXIO_CommonIRQHandler(void)
 {
     uint8_t index;
 
-    for (index = 0; index < FLEXIO_HANDLE_COUNT; index++)
+    for (index = 0U; index < (uint8_t)FLEXIO_HANDLE_COUNT; index++)
     {
-        if (s_flexioHandle[index])
+        if (s_flexioHandle[index] != NULL)
         {
             s_flexioIsr[index](s_flexioType[index], s_flexioHandle[index]);
         }
     }
-/* Add for ARM errata 838869, affects Cortex-M4, Cortex-M4F Store immediate overlapping
-  exception return operation might vector to incorrect interrupt */
-#if defined __CORTEX_M && (__CORTEX_M == 4U)
-    __DSB();
-#endif
+    SDK_ISR_EXIT_BARRIER;
 }
 
+#if defined(FSL_FEATURE_FLEXIO_HAS_PIN_REGISTER) && FSL_FEATURE_FLEXIO_HAS_PIN_REGISTER
+/*!
+ * brief Configure a FLEXIO pin used by the board.
+ *
+ * To Config the FLEXIO PIN, define a pin configuration, as either input or output, in the user file.
+ * Then, call the FLEXIO_SetPinConfig() function.
+ *
+ * This is an example to define an input pin or an output pin configuration.
+ * code
+ * Define a digital input pin configuration,
+ * flexio_gpio_config_t config =
+ * {
+ *   kFLEXIO_DigitalInput,
+ *   0U,
+ *   kFLEXIO_FlagRisingEdgeEnable | kFLEXIO_InputInterruptEnable,
+ * }
+ * Define a digital output pin configuration,
+ * flexio_gpio_config_t config =
+ * {
+ *   kFLEXIO_DigitalOutput,
+ *   0U,
+ *   0U
+ * }
+ * endcode
+ * param base   FlexIO peripheral base address
+ * param pin    FLEXIO pin number.
+ * param config FLEXIO pin configuration pointer.
+ */
+void FLEXIO_SetPinConfig(FLEXIO_Type *base, uint32_t pin, flexio_gpio_config_t *config)
+{
+    assert(NULL != config);
+#if defined(FLEXIO_IRQS)
+    IRQn_Type flexio_irqs[] = FLEXIO_IRQS;
+#endif
+
+    if (config->pinDirection == kFLEXIO_DigitalInput)
+    {
+        base->PINOUTE &= ~(1UL << pin);
+        if (0U != (config->inputConfig & (uint8_t)kFLEXIO_InputInterruptEnable))
+        {
+            base->PINIEN = 1UL << pin;
+#if defined(FLEXIO_IRQS)
+            /* Clear pending NVIC IRQ before enable NVIC IRQ. */
+            NVIC_ClearPendingIRQ(flexio_irqs[FLEXIO_GetInstance(base)]);
+            /* Enable interrupt in NVIC. */
+            (void)EnableIRQ(flexio_irqs[FLEXIO_GetInstance(base)]);
+#endif
+        }
+
+        if (0U != (config->inputConfig & (uint8_t)kFLEXIO_FlagRisingEdgeEnable))
+        {
+            base->PINREN = 1UL << pin;
+        }
+
+        if (0U != (config->inputConfig & (uint8_t)kFLEXIO_FlagFallingEdgeEnable))
+        {
+            base->PINFEN = 1UL << pin;
+        }
+    }
+    else
+    {
+        FLEXIO_EnablePinOutput(base, pin);
+        FLEXIO_PinWrite(base, pin, config->outputLogic);
+    }
+}
+#endif /*FSL_FEATURE_FLEXIO_HAS_PIN_REGISTER*/
+
+void FLEXIO_DriverIRQHandler(void);
 void FLEXIO_DriverIRQHandler(void)
 {
     FLEXIO_CommonIRQHandler();
 }
 
+void FLEXIO0_DriverIRQHandler(void);
 void FLEXIO0_DriverIRQHandler(void)
 {
     FLEXIO_CommonIRQHandler();
 }
 
+void FLEXIO1_DriverIRQHandler(void);
 void FLEXIO1_DriverIRQHandler(void)
 {
     FLEXIO_CommonIRQHandler();
 }
 
+void UART2_FLEXIO_DriverIRQHandler(void);
 void UART2_FLEXIO_DriverIRQHandler(void)
 {
     FLEXIO_CommonIRQHandler();
 }
 
+void FLEXIO2_DriverIRQHandler(void);
 void FLEXIO2_DriverIRQHandler(void)
 {
     FLEXIO_CommonIRQHandler();
 }
 
+void FLEXIO3_DriverIRQHandler(void);
 void FLEXIO3_DriverIRQHandler(void)
 {
     FLEXIO_CommonIRQHandler();

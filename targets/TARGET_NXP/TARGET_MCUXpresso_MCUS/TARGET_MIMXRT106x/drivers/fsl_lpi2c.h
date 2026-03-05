@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2019 NXP
+ * Copyright 2016-2022, 2024-2025 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef _FSL_LPI2C_H_
-#define _FSL_LPI2C_H_
+#ifndef FSL_LPI2C_H_
+#define FSL_LPI2C_H_
 
 #include <stddef.h>
 #include "fsl_device_registers.h"
@@ -21,19 +21,25 @@
  * @{
  */
 
-/*! @name Driver version */
-/*@{*/
-/*! @brief LPI2C driver version 2.1.9. */
-#define FSL_LPI2C_DRIVER_VERSION (MAKE_VERSION(2, 1, 9))
-/*@}*/
+/*!
+ * @name Driver version
+ * @{
+ */
+/*! @brief LPI2C driver version. */
+#define FSL_LPI2C_DRIVER_VERSION (MAKE_VERSION(2, 6, 3))
+/*! @} */
 
-/*! @brief Timeout times for waiting flag. */
-#ifndef LPI2C_WAIT_TIMEOUT
-#define LPI2C_WAIT_TIMEOUT 0U /* Define to zero means keep waiting until the flag is assert/deassert. */
+/*! @brief Retry times for waiting flag. */
+#ifndef I2C_RETRY_TIMES
+#ifdef CONFIG_I2C_RETRY_TIMES
+#define I2C_RETRY_TIMES CONFIG_I2C_RETRY_TIMES
+#else
+#define I2C_RETRY_TIMES 0U /* Define to zero means keep waiting until the flag is assert/deassert. */
+#endif
 #endif
 
 /*! @brief LPI2C status return codes. */
-enum _lpi2c_status
+enum
 {
     kStatus_LPI2C_Busy = MAKE_STATUS(kStatusGroup_LPI2C, 0), /*!< The master is already performing a transfer. */
     kStatus_LPI2C_Idle = MAKE_STATUS(kStatusGroup_LPI2C, 1), /*!< The slave driver is idle. */
@@ -46,10 +52,8 @@ enum _lpi2c_status
     kStatus_LPI2C_NoTransferInProgress =
         MAKE_STATUS(kStatusGroup_LPI2C, 7), /*!< Attempt to abort a transfer when one is not in progress. */
     kStatus_LPI2C_DmaRequestFail = MAKE_STATUS(kStatusGroup_LPI2C, 8), /*!< DMA request failed. */
-    kStatus_LPI2C_Timeout        = MAKE_STATUS(kStatusGroup_LPI2C, 9), /*!< Timeout poling status flags. */
+    kStatus_LPI2C_Timeout        = MAKE_STATUS(kStatusGroup_LPI2C, 9), /*!< Timeout polling status flags. */
 };
-
-/*! @} */
 
 /*!
  * @addtogroup lpi2c_master_driver
@@ -85,7 +89,19 @@ enum _lpi2c_master_flags
     kLPI2C_MasterPinLowTimeoutFlag   = LPI2C_MSR_PLTF_MASK, /*!< Pin low timeout flag */
     kLPI2C_MasterDataMatchFlag       = LPI2C_MSR_DMF_MASK,  /*!< Data match flag */
     kLPI2C_MasterBusyFlag            = LPI2C_MSR_MBF_MASK,  /*!< Master busy flag */
-    kLPI2C_MasterBusBusyFlag         = LPI2C_MSR_BBF_MASK   /*!< Bus busy flag */
+    kLPI2C_MasterBusBusyFlag         = LPI2C_MSR_BBF_MASK,  /*!< Bus busy flag */
+
+    /*! All flags which are cleared by the driver upon starting a transfer. */
+    kLPI2C_MasterClearFlags = kLPI2C_MasterEndOfPacketFlag | kLPI2C_MasterStopDetectFlag | kLPI2C_MasterNackDetectFlag |
+                              kLPI2C_MasterArbitrationLostFlag | kLPI2C_MasterFifoErrFlag |
+                              kLPI2C_MasterPinLowTimeoutFlag | kLPI2C_MasterDataMatchFlag,
+    /*! IRQ sources enabled by the non-blocking transactional API. */
+    kLPI2C_MasterIrqFlags = kLPI2C_MasterArbitrationLostFlag | kLPI2C_MasterTxReadyFlag | kLPI2C_MasterRxReadyFlag |
+                            kLPI2C_MasterStopDetectFlag | kLPI2C_MasterNackDetectFlag | kLPI2C_MasterPinLowTimeoutFlag |
+                            kLPI2C_MasterFifoErrFlag,
+    /*! Errors to check for. */
+    kLPI2C_MasterErrorFlags = kLPI2C_MasterNackDetectFlag | kLPI2C_MasterArbitrationLostFlag |
+                              kLPI2C_MasterFifoErrFlag | kLPI2C_MasterPinLowTimeoutFlag
 };
 
 /*! @brief Direction of master and slave transfers. */
@@ -180,7 +196,9 @@ typedef struct _lpi2c_match_config
 } lpi2c_data_match_config_t;
 
 /* Forward declaration of the transfer descriptor and handle typedefs. */
+/*! @brief LPI2C master descriptor of the transfer. */
 typedef struct _lpi2c_master_transfer lpi2c_master_transfer_t;
+/*! @brief LPI2C master handle of the transfer. */
 typedef struct _lpi2c_master_handle lpi2c_master_handle_t;
 
 /*!
@@ -190,7 +208,8 @@ typedef struct _lpi2c_master_handle lpi2c_master_handle_t;
  * in the call to LPI2C_MasterTransferCreateHandle().
  *
  * @param base The LPI2C peripheral base address.
- * @param completionStatus Either #kStatus_Success or an error code describing how the transfer completed.
+ * @param handle Pointer to the LPI2C master driver handle.
+ * @param completionStatus Either kStatus_Success or an error code describing how the transfer completed.
  * @param userData Arbitrary pointer-sized value passed from the application.
  */
 typedef void (*lpi2c_master_transfer_callback_t)(LPI2C_Type *base,
@@ -238,11 +257,16 @@ struct _lpi2c_master_handle
     uint8_t state;                                       /*!< Transfer state machine current state. */
     uint16_t remainingBytes;                             /*!< Remaining byte count in current state. */
     uint8_t *buf;                                        /*!< Buffer pointer for current state. */
-    uint16_t commandBuffer[7];                           /*!< LPI2C command sequence. */
+    uint16_t commandBuffer[6];                           /*!< LPI2C command sequence. When all 6 command words are used:
+         Start&addr&write[1 word] + subaddr[4 words] + restart&addr&read[1 word] */
     lpi2c_master_transfer_t transfer;                    /*!< Copy of the current transfer info. */
     lpi2c_master_transfer_callback_t completionCallback; /*!< Callback function pointer. */
     void *userData;                                      /*!< Application data passed to callback. */
 };
+
+/*! @brief Typedef for master interrupt handler, used internally for LPI2C master interrupt and EDMA transactional APIs.
+ */
+typedef void (*lpi2c_master_isr_t)(LPI2C_Type *base, void *handle);
 
 /*! @} */
 
@@ -280,6 +304,15 @@ enum _lpi2c_slave_flags
     kLPI2C_SlaveGeneralCallFlag         = LPI2C_SSR_GCF_MASK,  /*!< General call flag */
     kLPI2C_SlaveBusyFlag                = LPI2C_SSR_SBF_MASK,  /*!< Master busy flag */
     kLPI2C_SlaveBusBusyFlag             = LPI2C_SSR_BBF_MASK,  /*!< Bus busy flag */
+    /*! All flags which are cleared by the driver upon starting a transfer. */
+    kLPI2C_SlaveClearFlags = kLPI2C_SlaveRepeatedStartDetectFlag | kLPI2C_SlaveStopDetectFlag | kLPI2C_SlaveBitErrFlag |
+                             kLPI2C_SlaveFifoErrFlag,
+    /*! IRQ sources enabled by the non-blocking transactional API. */
+    kLPI2C_SlaveIrqFlags = kLPI2C_SlaveTxReadyFlag | kLPI2C_SlaveRxReadyFlag | kLPI2C_SlaveStopDetectFlag |
+                           kLPI2C_SlaveRepeatedStartDetectFlag | kLPI2C_SlaveFifoErrFlag | kLPI2C_SlaveBitErrFlag |
+                           kLPI2C_SlaveTransmitAckFlag | kLPI2C_SlaveAddressValidFlag,
+    /*! Errors to check for. */
+    kLPI2C_SlaveErrorFlags = kLPI2C_SlaveFifoErrFlag | kLPI2C_SlaveBitErrFlag
 };
 
 /*! @brief LPI2C slave address match options. */
@@ -321,11 +354,13 @@ typedef struct _lpi2c_slave_config
         bool enableRx;      /*!< Enables SCL clock stretching when receive data flag is set during
                                          a slave-receive transfer. */
         bool enableAddress; /*!< Enables SCL clock stretching when the address valid flag is asserted. */
-    } sclStall;
+    } sclStall;                       /*!< SCL stall enable options. */
     bool ignoreAck;                   /*!< Continue transfers after a NACK is detected. */
     bool enableReceivedAddressRead;   /*!< Enable reading the address received address as the first byte of data. */
-    uint32_t sdaGlitchFilterWidth_ns; /*!< Width in nanoseconds of the digital filter on the SDA signal. */
-    uint32_t sclGlitchFilterWidth_ns; /*!< Width in nanoseconds of the digital filter on the SCL signal. */
+    uint32_t sdaGlitchFilterWidth_ns; /*!< Width in nanoseconds of the digital filter on the SDA signal. Set to 0 to
+                                         disable. */
+    uint32_t sclGlitchFilterWidth_ns; /*!< Width in nanoseconds of the digital filter on the SCL signal. Set to 0 to
+                                         disable. */
     uint32_t dataValidDelay_ns;       /*!< Width in nanoseconds of the data valid delay. */
     uint32_t clockHoldTime_ns;        /*!< Width in nanoseconds of the clock hold time. */
 } lpi2c_slave_config_t;
@@ -369,6 +404,7 @@ typedef struct _lpi2c_slave_transfer
 } lpi2c_slave_transfer_t;
 
 /* Forward declaration. */
+/*! @brief LPI2C slave handle structure. */
 typedef struct _lpi2c_slave_handle lpi2c_slave_handle_t;
 
 /*!
@@ -401,6 +437,26 @@ struct _lpi2c_slave_handle
 /*! @} */
 
 /*******************************************************************************
+ * Variables
+ ******************************************************************************/
+/*! Array to map LPI2C instance number to IRQ number, used internally for LPI2C master interrupt and EDMA transactional
+APIs. */
+#if defined(FSL_FEATURE_LPI2C_HAS_ROLE_SPLIT_IRQ) && FSL_FEATURE_LPI2C_HAS_ROLE_SPLIT_IRQ
+extern IRQn_Type const kLpi2cMasterIrqs[];
+extern IRQn_Type const kLpi2cSlaveIrqs[];
+#else
+extern IRQn_Type const kLpi2cIrqs[];
+#endif
+
+/*! Pointer to master IRQ handler for each instance, used internally for LPI2C master interrupt and EDMA transactional
+APIs. */
+extern lpi2c_master_isr_t s_lpi2cMasterIsr;
+
+/*! Pointers to master handles for each instance, used internally for LPI2C master interrupt and EDMA transactional
+APIs. */
+extern void *s_lpi2cMasterHandle[];
+
+/*******************************************************************************
  * API
  ******************************************************************************/
 
@@ -409,12 +465,25 @@ extern "C" {
 #endif
 
 /*!
+ * @brief Returns an instance number given a base address.
+ *
+ * If an invalid base address is passed, debug builds will assert. Release builds will just return
+ * instance number 0.
+ *
+ * @param base The LPI2C peripheral base address.
+ * @return LPI2C instance number starting from 0.
+ */
+uint32_t LPI2C_GetInstance(LPI2C_Type *base);
+
+/*!
  * @addtogroup lpi2c_master_driver
  * @{
  */
 
-/*! @name Initialization and deinitialization */
-/*@{*/
+/*!
+ * @name Initialization and deinitialization
+ * @{
+ */
 
 /*!
  * @brief Provides a default configuration for the LPI2C master peripheral.
@@ -471,13 +540,32 @@ void LPI2C_MasterDeinit(LPI2C_Type *base);
  * @brief Configures LPI2C master data match feature.
  *
  * @param base The LPI2C peripheral base address.
- * @param config Settings for the data match feature.
+ * @param matchConfig Settings for the data match feature.
  */
-void LPI2C_MasterConfigureDataMatch(LPI2C_Type *base, const lpi2c_data_match_config_t *config);
+void LPI2C_MasterConfigureDataMatch(LPI2C_Type *base, const lpi2c_data_match_config_t *matchConfig);
 
+/*!
+ * @brief Convert provided flags to status code, and clear any errors if present.
+ * @param base The LPI2C peripheral base address.
+ * @param status Current status flags value that will be checked.
+ * @retval #kStatus_Success
+ * @retval #kStatus_LPI2C_PinLowTimeout
+ * @retval #kStatus_LPI2C_ArbitrationLost
+ * @retval #kStatus_LPI2C_Nak
+ * @retval #kStatus_LPI2C_FifoError
+ */
 /* Not static so it can be used from fsl_lpi2c_edma.c. */
 status_t LPI2C_MasterCheckAndClearError(LPI2C_Type *base, uint32_t status);
 
+/*!
+ * @brief Make sure the bus isn't already busy.
+ *
+ * A busy bus is allowed if we are the one driving it.
+ *
+ * @param base The LPI2C peripheral base address.
+ * @retval #kStatus_Success
+ * @retval #kStatus_LPI2C_Busy
+ */
 /* Not static so it can be used from fsl_lpi2c_edma.c. */
 status_t LPI2C_CheckForBusyBus(LPI2C_Type *base);
 
@@ -502,13 +590,15 @@ static inline void LPI2C_MasterReset(LPI2C_Type *base)
  */
 static inline void LPI2C_MasterEnable(LPI2C_Type *base, bool enable)
 {
-    base->MCR = (base->MCR & ~LPI2C_MCR_MEN_MASK) | LPI2C_MCR_MEN(enable);
+    base->MCR = (base->MCR & ~LPI2C_MCR_MEN_MASK) | LPI2C_MCR_MEN(enable ? 1U : 0U);
 }
 
-/*@}*/
+/*! @}*/
 
-/*! @name Status */
-/*@{*/
+/*!
+ * @name Status
+ * @{
+ */
 
 /*!
  * @brief Gets the LPI2C master status flags.
@@ -543,7 +633,7 @@ static inline uint32_t LPI2C_MasterGetStatusFlags(LPI2C_Type *base)
  *
  * @param base The LPI2C peripheral base address.
  * @param statusMask A bitmask of status flags that are to be cleared. The mask is composed of
- *  #_lpi2c_master_flags enumerators OR'd together. You may pass the result of a previous call to
+ *  _lpi2c_master_flags enumerators OR'd together. You may pass the result of a previous call to
  *  LPI2C_MasterGetStatusFlags().
  * @see _lpi2c_master_flags.
  */
@@ -552,10 +642,12 @@ static inline void LPI2C_MasterClearStatusFlags(LPI2C_Type *base, uint32_t statu
     base->MSR = statusMask;
 }
 
-/*@}*/
+/*! @}*/
 
-/*! @name Interrupts */
-/*@{*/
+/*!
+ * @name Interrupts
+ * @{
+ */
 
 /*!
  * @brief Enables the LPI2C master interrupt requests.
@@ -564,7 +656,7 @@ static inline void LPI2C_MasterClearStatusFlags(LPI2C_Type *base, uint32_t statu
  * interrupts.
  *
  * @param base The LPI2C peripheral base address.
- * @param interruptMask Bit mask of interrupts to enable. See #_lpi2c_master_flags for the set
+ * @param interruptMask Bit mask of interrupts to enable. See _lpi2c_master_flags for the set
  *      of constants that should be OR'd together to form the bit mask.
  */
 static inline void LPI2C_MasterEnableInterrupts(LPI2C_Type *base, uint32_t interruptMask)
@@ -579,7 +671,7 @@ static inline void LPI2C_MasterEnableInterrupts(LPI2C_Type *base, uint32_t inter
  * interrupts.
  *
  * @param base The LPI2C peripheral base address.
- * @param interruptMask Bit mask of interrupts to disable. See #_lpi2c_master_flags for the set
+ * @param interruptMask Bit mask of interrupts to disable. See _lpi2c_master_flags for the set
  *      of constants that should be OR'd together to form the bit mask.
  */
 static inline void LPI2C_MasterDisableInterrupts(LPI2C_Type *base, uint32_t interruptMask)
@@ -591,7 +683,7 @@ static inline void LPI2C_MasterDisableInterrupts(LPI2C_Type *base, uint32_t inte
  * @brief Returns the set of currently enabled LPI2C master interrupt requests.
  *
  * @param base The LPI2C peripheral base address.
- * @return A bitmask composed of #_lpi2c_master_flags enumerators OR'd together to indicate the
+ * @return A bitmask composed of _lpi2c_master_flags enumerators OR'd together to indicate the
  *      set of enabled interrupts.
  */
 static inline uint32_t LPI2C_MasterGetEnabledInterrupts(LPI2C_Type *base)
@@ -599,10 +691,12 @@ static inline uint32_t LPI2C_MasterGetEnabledInterrupts(LPI2C_Type *base)
     return base->MIER;
 }
 
-/*@}*/
+/*! @}*/
 
-/*! @name DMA control */
-/*@{*/
+/*!
+ * @name DMA control
+ * @{
+ */
 
 /*!
  * @brief Enables or disables LPI2C master DMA requests.
@@ -613,7 +707,7 @@ static inline uint32_t LPI2C_MasterGetEnabledInterrupts(LPI2C_Type *base)
  */
 static inline void LPI2C_MasterEnableDMA(LPI2C_Type *base, bool enableTx, bool enableRx)
 {
-    base->MDER = LPI2C_MDER_TDDE(enableTx) | LPI2C_MDER_RDDE(enableRx);
+    base->MDER = LPI2C_MDER_TDDE(enableTx ? 1U : 0U) | LPI2C_MDER_RDDE(enableRx ? 1U : 0U);
 }
 
 /*!
@@ -624,7 +718,7 @@ static inline void LPI2C_MasterEnableDMA(LPI2C_Type *base, bool enableTx, bool e
  */
 static inline uint32_t LPI2C_MasterGetTxFifoAddress(LPI2C_Type *base)
 {
-    return (uint32_t)&base->MTDR;
+    return (uint32_t)(uintptr_t)&base->MTDR;
 }
 
 /*!
@@ -635,13 +729,15 @@ static inline uint32_t LPI2C_MasterGetTxFifoAddress(LPI2C_Type *base)
  */
 static inline uint32_t LPI2C_MasterGetRxFifoAddress(LPI2C_Type *base)
 {
-    return (uint32_t)&base->MRDR;
+    return (uint32_t)(uintptr_t)&base->MRDR;
 }
 
-/*@}*/
+/*! @}*/
 
-/*! @name FIFO control */
-/*@{*/
+/*!
+ * @name FIFO control
+ * @{
+ */
 
 /*!
  * @brief Sets the watermarks for LPI2C master FIFOs.
@@ -670,20 +766,22 @@ static inline void LPI2C_MasterSetWatermarks(LPI2C_Type *base, size_t txWords, s
  */
 static inline void LPI2C_MasterGetFifoCounts(LPI2C_Type *base, size_t *rxCount, size_t *txCount)
 {
-    if (txCount)
+    if (NULL != txCount)
     {
         *txCount = (base->MFSR & LPI2C_MFSR_TXCOUNT_MASK) >> LPI2C_MFSR_TXCOUNT_SHIFT;
     }
-    if (rxCount)
+    if (NULL != rxCount)
     {
         *rxCount = (base->MFSR & LPI2C_MFSR_RXCOUNT_MASK) >> LPI2C_MFSR_RXCOUNT_SHIFT;
     }
 }
 
-/*@}*/
+/*! @}*/
 
-/*! @name Bus operations */
-/*@{*/
+/*!
+ * @name Bus operations
+ * @{
+ */
 
 /*!
  * @brief Sets the I2C bus frequency for master transactions.
@@ -712,7 +810,7 @@ void LPI2C_MasterSetBaudRate(LPI2C_Type *base, uint32_t sourceClock_Hz, uint32_t
  */
 static inline bool LPI2C_MasterGetBusIdleState(LPI2C_Type *base)
 {
-    return (base->MSR & LPI2C_MSR_BBF_MASK) >> LPI2C_MSR_BBF_SHIFT;
+    return ((base->MSR & LPI2C_MSR_BBF_MASK) >> LPI2C_MSR_BBF_SHIFT) == 1U ? true : false;
 }
 
 /*!
@@ -727,7 +825,7 @@ static inline bool LPI2C_MasterGetBusIdleState(LPI2C_Type *base)
  * @param address 7-bit slave device address, in bits [6:0].
  * @param dir Master transfer direction, either #kLPI2C_Read or #kLPI2C_Write. This parameter is used to set
  *      the R/w bit (bit 0) in the transmitted slave address.
- * @retval #kStatus_Success START signal and address were successfully enqueued in the transmit FIFO.
+ * @retval kStatus_Success START signal and address were successfully enqueued in the transmit FIFO.
  * @retval #kStatus_LPI2C_Busy Another master is currently utilizing the bus.
  */
 status_t LPI2C_MasterStart(LPI2C_Type *base, uint8_t address, lpi2c_direction_t dir);
@@ -745,7 +843,7 @@ status_t LPI2C_MasterStart(LPI2C_Type *base, uint8_t address, lpi2c_direction_t 
  * @param address 7-bit slave device address, in bits [6:0].
  * @param dir Master transfer direction, either #kLPI2C_Read or #kLPI2C_Write. This parameter is used to set
  *      the R/w bit (bit 0) in the transmitted slave address.
- * @retval #kStatus_Success Repeated START signal and address were successfully enqueued in the transmit FIFO.
+ * @retval kStatus_Success Repeated START signal and address were successfully enqueued in the transmit FIFO.
  * @retval #kStatus_LPI2C_Busy Another master is currently utilizing the bus.
  */
 static inline status_t LPI2C_MasterRepeatedStart(LPI2C_Type *base, uint8_t address, lpi2c_direction_t dir)
@@ -763,7 +861,7 @@ static inline status_t LPI2C_MasterRepeatedStart(LPI2C_Type *base, uint8_t addre
  * @param base  The LPI2C peripheral base address.
  * @param txBuff The pointer to the data to be transferred.
  * @param txSize The length in bytes of the data to be transferred.
- * @retval #kStatus_Success Data was sent successfully.
+ * @retval kStatus_Success Data was sent successfully.
  * @retval #kStatus_LPI2C_Busy Another master is currently utilizing the bus.
  * @retval #kStatus_LPI2C_Nak The slave device sent a NAK in response to a byte.
  * @retval #kStatus_LPI2C_FifoError FIFO under run or over run.
@@ -778,7 +876,7 @@ status_t LPI2C_MasterSend(LPI2C_Type *base, void *txBuff, size_t txSize);
  * @param base  The LPI2C peripheral base address.
  * @param rxBuff The pointer to the data to be transferred.
  * @param rxSize The length in bytes of the data to be transferred.
- * @retval #kStatus_Success Data was received successfully.
+ * @retval kStatus_Success Data was received successfully.
  * @retval #kStatus_LPI2C_Busy Another master is currently utilizing the bus.
  * @retval #kStatus_LPI2C_Nak The slave device sent a NAK in response to a byte.
  * @retval #kStatus_LPI2C_FifoError FIFO under run or overrun.
@@ -793,7 +891,7 @@ status_t LPI2C_MasterReceive(LPI2C_Type *base, void *rxBuff, size_t rxSize);
  * This function does not return until the STOP signal is seen on the bus, or an error occurs.
  *
  * @param base The LPI2C peripheral base address.
- * @retval #kStatus_Success The STOP signal was successfully sent on the bus and the transaction terminated.
+ * @retval kStatus_Success The STOP signal was successfully sent on the bus and the transaction terminated.
  * @retval #kStatus_LPI2C_Busy Another master is currently utilizing the bus.
  * @retval #kStatus_LPI2C_Nak The slave device sent a NAK in response to a byte.
  * @retval #kStatus_LPI2C_FifoError FIFO under run or overrun.
@@ -810,7 +908,7 @@ status_t LPI2C_MasterStop(LPI2C_Type *base);
  *
  * @param base The LPI2C peripheral base address.
  * @param transfer Pointer to the transfer structure.
- * @retval #kStatus_Success Data was received successfully.
+ * @retval kStatus_Success Data was received successfully.
  * @retval #kStatus_LPI2C_Busy Another master is currently utilizing the bus.
  * @retval #kStatus_LPI2C_Nak The slave device sent a NAK in response to a byte.
  * @retval #kStatus_LPI2C_FifoError FIFO under run or overrun.
@@ -819,10 +917,12 @@ status_t LPI2C_MasterStop(LPI2C_Type *base);
  */
 status_t LPI2C_MasterTransferBlocking(LPI2C_Type *base, lpi2c_master_transfer_t *transfer);
 
-/*@}*/
+/*! @}*/
 
-/*! @name Non-blocking */
-/*@{*/
+/*!
+ * @name Non-blocking
+ * @{
+ */
 
 /*!
  * @brief Creates a new handle for the LPI2C master non-blocking APIs.
@@ -852,7 +952,7 @@ void LPI2C_MasterTransferCreateHandle(LPI2C_Type *base,
  * @param base The LPI2C peripheral base address.
  * @param handle Pointer to the LPI2C master driver handle.
  * @param transfer The pointer to the transfer descriptor.
- * @retval #kStatus_Success The transaction was started successfully.
+ * @retval kStatus_Success The transaction was started successfully.
  * @retval #kStatus_LPI2C_Busy Either another master is currently utilizing the bus, or a non-blocking
  *      transaction is already in progress.
  */
@@ -865,8 +965,8 @@ status_t LPI2C_MasterTransferNonBlocking(LPI2C_Type *base,
  * @param base The LPI2C peripheral base address.
  * @param handle Pointer to the LPI2C master driver handle.
  * @param[out] count Number of bytes transferred so far by the non-blocking transaction.
- * @retval #kStatus_Success
- * @retval #kStatus_NoTransferInProgress There is not a non-blocking transaction currently in progress.
+ * @retval kStatus_Success
+ * @retval kStatus_NoTransferInProgress There is not a non-blocking transaction currently in progress.
  */
 status_t LPI2C_MasterTransferGetCount(LPI2C_Type *base, lpi2c_master_handle_t *handle, size_t *count);
 
@@ -878,26 +978,26 @@ status_t LPI2C_MasterTransferGetCount(LPI2C_Type *base, lpi2c_master_handle_t *h
  *
  * @param base The LPI2C peripheral base address.
  * @param handle Pointer to the LPI2C master driver handle.
- * @retval #kStatus_Success A transaction was successfully aborted.
- * @retval #kStatus_LPI2C_Idle There is not a non-blocking transaction currently in progress.
  */
 void LPI2C_MasterTransferAbort(LPI2C_Type *base, lpi2c_master_handle_t *handle);
 
-/*@}*/
+/*! @}*/
 
-/*! @name IRQ handler */
-/*@{*/
+/*!
+ * @name IRQ handler 
+ * @{
+ */
 
 /*!
  * @brief Reusable routine to handle master interrupts.
  * @note This function does not need to be called unless you are reimplementing the
  *  nonblocking API's interrupt handler routines to add special functionality.
  * @param base The LPI2C peripheral base address.
- * @param handle Pointer to the LPI2C master driver handle.
+ * @param lpi2cMasterHandle Pointer to the LPI2C master driver handle.
  */
-void LPI2C_MasterTransferHandleIRQ(LPI2C_Type *base, lpi2c_master_handle_t *handle);
+void LPI2C_MasterTransferHandleIRQ(LPI2C_Type *base, void *lpi2cMasterHandle);
 
-/*@}*/
+/*! @}*/
 
 /*! @} */
 
@@ -906,8 +1006,10 @@ void LPI2C_MasterTransferHandleIRQ(LPI2C_Type *base, lpi2c_master_handle_t *hand
  * @{
  */
 
-/*! @name Slave initialization and deinitialization */
-/*@{*/
+/*!
+ * @name Slave initialization and deinitialization
+ * @{
+ */
 
 /*!
  * @brief Provides a default configuration for the LPI2C slave peripheral.
@@ -985,13 +1087,15 @@ static inline void LPI2C_SlaveReset(LPI2C_Type *base)
  */
 static inline void LPI2C_SlaveEnable(LPI2C_Type *base, bool enable)
 {
-    base->SCR = (base->SCR & ~LPI2C_SCR_SEN_MASK) | LPI2C_SCR_SEN(enable);
+    base->SCR = (base->SCR & ~LPI2C_SCR_SEN_MASK) | LPI2C_SCR_SEN(enable ? 1U : 0U);
 }
 
-/*@}*/
+/*! @}*/
 
-/*! @name Slave status */
-/*@{*/
+/*!
+ * @name Slave status 
+ * @{
+ */
 
 /*!
  * @brief Gets the LPI2C slave status flags.
@@ -1031,11 +1135,12 @@ static inline void LPI2C_SlaveClearStatusFlags(LPI2C_Type *base, uint32_t status
 {
     base->SSR = statusMask;
 }
+/*! @}*/
 
-/*@}*/
-
-/*! @name Slave interrupts */
-/*@{*/
+/*!
+ * @name Slave interrupts 
+ * @{
+ */
 
 /*!
  * @brief Enables the LPI2C slave interrupt requests.
@@ -1078,10 +1183,12 @@ static inline uint32_t LPI2C_SlaveGetEnabledInterrupts(LPI2C_Type *base)
     return base->SIER;
 }
 
-/*@}*/
+/*! @}*/
 
-/*! @name Slave DMA control */
-/*@{*/
+/*!
+ * @name Slave DMA control
+ * @{
+ */
 
 /*!
  * @brief Enables or disables the LPI2C slave peripheral DMA requests.
@@ -1095,13 +1202,15 @@ static inline uint32_t LPI2C_SlaveGetEnabledInterrupts(LPI2C_Type *base)
 static inline void LPI2C_SlaveEnableDMA(LPI2C_Type *base, bool enableAddressValid, bool enableRx, bool enableTx)
 {
     base->SDER = (base->SDER & ~(LPI2C_SDER_AVDE_MASK | LPI2C_SDER_RDDE_MASK | LPI2C_SDER_TDDE_MASK)) |
-                 LPI2C_SDER_AVDE(enableAddressValid) | LPI2C_SDER_RDDE(enableRx) | LPI2C_SDER_TDDE(enableTx);
+                 LPI2C_SDER_AVDE(enableAddressValid ? 1U : 0U) | LPI2C_SDER_RDDE(enableRx ? 1U : 0U) | LPI2C_SDER_TDDE(enableTx ? 1U : 0U);
 }
 
-/*@}*/
+/*! @}*/
 
-/*! @name Slave bus operations */
-/*@{*/
+/*!
+ * @name Slave bus operations
+ * @{
+ */
 
 /*!
  * @brief Returns whether the bus is idle.
@@ -1114,7 +1223,7 @@ static inline void LPI2C_SlaveEnableDMA(LPI2C_Type *base, bool enableAddressVali
  */
 static inline bool LPI2C_SlaveGetBusIdleState(LPI2C_Type *base)
 {
-    return (base->SSR & LPI2C_SSR_BBF_MASK) >> LPI2C_SSR_BBF_SHIFT;
+    return ((base->SSR & LPI2C_SSR_BBF_MASK) >> LPI2C_SSR_BBF_SHIFT) == 1U ? true : false;
 }
 
 /*!
@@ -1130,6 +1239,27 @@ static inline bool LPI2C_SlaveGetBusIdleState(LPI2C_Type *base)
 static inline void LPI2C_SlaveTransmitAck(LPI2C_Type *base, bool ackOrNack)
 {
     base->STAR = LPI2C_STAR_TXNACK(!ackOrNack);
+}
+
+/*!
+ * @brief Enables or disables ACKSTALL.
+ *
+ * When enables ACKSTALL, software can transmit either an ACK or NAK on the I2C bus in response to
+ * a byte from the master.
+ *
+ * @param base The LPI2C peripheral base address.
+ * @param enable True will enable ACKSTALL,false will disable ACKSTALL.
+ */
+static inline void LPI2C_SlaveEnableAckStall(LPI2C_Type *base, bool enable)
+{
+    if (enable)
+    {
+        base->SCFGR1 |= LPI2C_SCFGR1_ACKSTALL_MASK;
+    }
+    else
+    {
+        base->SCFGR1 &= ~LPI2C_SCFGR1_ACKSTALL_MASK;
+    }
 }
 
 /*!
@@ -1168,10 +1298,12 @@ status_t LPI2C_SlaveSend(LPI2C_Type *base, void *txBuff, size_t txSize, size_t *
  */
 status_t LPI2C_SlaveReceive(LPI2C_Type *base, void *rxBuff, size_t rxSize, size_t *actualRxSize);
 
-/*@}*/
+/*! @}*/
 
-/*! @name Slave non-blocking */
-/*@{*/
+/*!
+ * @name Slave non-blocking
+ * @{
+ */
 
 /*!
  * @brief Creates a new handle for the LPI2C slave non-blocking APIs.
@@ -1210,12 +1342,12 @@ void LPI2C_SlaveTransferCreateHandle(LPI2C_Type *base,
  * a convenient way to enable all events.
  *
  * @param base The LPI2C peripheral base address.
- * @param handle Pointer to #lpi2c_slave_handle_t structure which stores the transfer state.
+ * @param handle Pointer to lpi2c_slave_handle_t structure which stores the transfer state.
  * @param eventMask Bit mask formed by OR'ing together #lpi2c_slave_transfer_event_t enumerators to specify
  *      which events to send to the callback. Other accepted values are 0 to get a default set of
  *      only the transmit and receive events, and #kLPI2C_SlaveAllEvents to enable all events.
  *
- * @retval #kStatus_Success Slave transfers were successfully started.
+ * @retval kStatus_Success Slave transfers were successfully started.
  * @retval #kStatus_LPI2C_Busy Slave transfers have already been started on this handle.
  */
 status_t LPI2C_SlaveTransferNonBlocking(LPI2C_Type *base, lpi2c_slave_handle_t *handle, uint32_t eventMask);
@@ -1226,8 +1358,8 @@ status_t LPI2C_SlaveTransferNonBlocking(LPI2C_Type *base, lpi2c_slave_handle_t *
  * @param handle Pointer to i2c_slave_handle_t structure.
  * @param[out] count Pointer to a value to hold the number of bytes transferred. May be NULL if the count is not
  *      required.
- * @retval #kStatus_Success
- * @retval #kStatus_NoTransferInProgress
+ * @retval kStatus_Success
+ * @retval kStatus_NoTransferInProgress
  */
 status_t LPI2C_SlaveTransferGetCount(LPI2C_Type *base, lpi2c_slave_handle_t *handle, size_t *count);
 
@@ -1235,32 +1367,48 @@ status_t LPI2C_SlaveTransferGetCount(LPI2C_Type *base, lpi2c_slave_handle_t *han
  * @brief Aborts the slave non-blocking transfers.
  * @note This API could be called at any time to stop slave for handling the bus events.
  * @param base The LPI2C peripheral base address.
- * @param handle Pointer to #lpi2c_slave_handle_t structure which stores the transfer state.
- * @retval #kStatus_Success
- * @retval #kStatus_LPI2C_Idle
+ * @param handle Pointer to lpi2c_slave_handle_t structure which stores the transfer state.
  */
 void LPI2C_SlaveTransferAbort(LPI2C_Type *base, lpi2c_slave_handle_t *handle);
 
-/*@}*/
+/*! @}*/
 
-/*! @name Slave IRQ handler */
-/*@{*/
+/*!
+ * @name Slave IRQ handler
+ * @{
+ */
 
 /*!
  * @brief Reusable routine to handle slave interrupts.
  * @note This function does not need to be called unless you are reimplementing the
  *  non blocking API's interrupt handler routines to add special functionality.
  * @param base The LPI2C peripheral base address.
- * @param handle Pointer to #lpi2c_slave_handle_t structure which stores the transfer state.
+ * @param handle Pointer to lpi2c_slave_handle_t structure which stores the transfer state.
  */
 void LPI2C_SlaveTransferHandleIRQ(LPI2C_Type *base, lpi2c_slave_handle_t *handle);
 
-/*@}*/
+/*! @}*/
+
+/*! @} */
+
+/*!
+ * @name Common IRQ Handler
+ * @{
+ */
+
+/*!
+ * @brief LPI2C driver IRQ handler common entry.
+ *
+ * This function provides the common IRQ request entry for LPI2C.
+ *
+ * @param instance LPI2C instance.
+ */
+void LPI2C_DriverIRQHandler(uint32_t instance);
 
 /*! @} */
 
 #if defined(__cplusplus)
 }
 #endif
-
-#endif /* _FSL_LPI2C_H_ */
+/*! @} */
+#endif /* FSL_LPI2C_H_ */

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2019, 2023 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -43,7 +43,7 @@ static uint32_t CMP_GetInstance(CMP_Type *base)
     /* Find the instance index from base address mappings. */
     for (instance = 0; instance < ARRAY_SIZE(s_cmpBases); instance++)
     {
-        if (s_cmpBases[instance] == base)
+        if (MSDK_REG_SECURE_ADDR(s_cmpBases[instance]) == MSDK_REG_SECURE_ADDR(base))
         {
             break;
         }
@@ -133,8 +133,9 @@ void CMP_Init(CMP_Type *base, const cmp_config_t *config)
  */
 void CMP_Deinit(CMP_Type *base)
 {
-    /* Disable the CMP module. */
-    CMP_Enable(base, false);
+    // Disable the CMP module.
+    base->CR0 = 0U;
+    base->CR1 = 0U;
 
 #if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
     /* Disable the clock. */
@@ -243,7 +244,7 @@ void CMP_SetFilterConfig(CMP_Type *base, const cmp_filter_config_t *config)
     }
     else
     {
-        base->CR1 &= ~CMP_CR1_SE_MASK; /* Choose the internal divided bus clock. */
+        base->CR1 &= (uint8_t)(~CMP_CR1_SE_MASK); /* Choose the internal divided bus clock. */
     }
 #endif /* FSL_FEATURE_CMP_HAS_EXTERNAL_SAMPLE_SUPPORT */
     /* Set the filter count. */

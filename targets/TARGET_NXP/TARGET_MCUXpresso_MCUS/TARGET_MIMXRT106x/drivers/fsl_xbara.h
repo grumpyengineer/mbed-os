@@ -1,13 +1,13 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2019 NXP
+ * Copyright 2016-2019, 2022, 2024 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _FSL_XBARA_H_
-#define _FSL_XBARA_H_
+#ifndef FSL_XBARA_H_
+#define FSL_XBARA_H_
 
 #include "fsl_common.h"
 
@@ -20,15 +20,16 @@
  * Definitions
  ******************************************************************************/
 
-#define FSL_XBARA_DRIVER_VERSION (MAKE_VERSION(2, 0, 4)) /*!< Version 2.0.4. */
+#define FSL_XBARA_DRIVER_VERSION (MAKE_VERSION(2, 0, 6))
 
 /* Macros for entire XBARA_SELx register.  */
-#define XBARA_SELx(base, output) (*(volatile uint16_t *)((uintptr_t) & (base->SEL0) + ((output) / 2U) * 2U))
+#define XBARA_SELx(base, output) (((volatile uint16_t *)(&((base)->SEL0)))[(uint32_t)(output) / 2UL])
+
 /* Set the XBARA_SELx_SELx field to a new value. */
-#define XBARA_WR_SELx_SELx(base, input, output)                                                    \
-    (XBARA_SELx((base), (output)) =                                                                \
-         ((XBARA_SELx((base), (output)) & ~(0xFFU << (XBARA_SEL0_SEL1_SHIFT * ((output) % 2U)))) | \
-          ((input) << (XBARA_SEL0_SEL1_SHIFT * ((output) % 2U)))))
+#define XBARA_WR_SELx_SELx(base, input, output) XBARA_SetSignalsConnection((base), (input), (output))
+
+/* For driver backward compatibility.  */
+#define kXBARA_RequestInterruptEnalbe kXBARA_RequestInterruptEnable
 
 /*!
  * @brief XBARA active edge for detection
@@ -48,7 +49,7 @@ typedef enum _xbar_request
 {
     kXBARA_RequestDisable         = 0U, /*!< Interrupt and DMA are disabled. */
     kXBARA_RequestDMAEnable       = 1U, /*!< DMA enabled, interrupt disabled. */
-    kXBARA_RequestInterruptEnalbe = 2U  /*!< Interrupt enabled, DMA disabled. */
+    kXBARA_RequestInterruptEnable = 2U  /*!< Interrupt enabled, DMA disabled. */
 } xbara_request_t;
 
 /*!
@@ -182,4 +183,4 @@ void XBARA_SetOutputSignalConfig(XBARA_Type *base,
 
 /*!* @} */
 
-#endif /* _FSL_XBARA_H_ */
+#endif /* FSL_XBARA_H_ */

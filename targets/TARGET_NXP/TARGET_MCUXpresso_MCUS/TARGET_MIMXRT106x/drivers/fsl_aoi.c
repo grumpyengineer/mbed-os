@@ -1,30 +1,48 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2019 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include "fsl_aoi.h"
 
+/*******************************************************************************
+ * Definitions
+ ******************************************************************************/
 /* Component ID definition, used by tools. */
 #ifndef FSL_COMPONENT_ID
 #define FSL_COMPONENT_ID "platform.drivers.aoi"
+#endif
+
+#if defined(AOI_RSTS)
+#define AOI_RESETS_ARRAY AOI_RSTS
 #endif
 
 /*******************************************************************************
  * Variables
  ******************************************************************************/
 /*! @brief Pointers to aoi bases for each instance. */
+#if defined(AOI_RESETS_ARRAY) || \
+   !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
 static AOI_Type *const s_aoiBases[] = AOI_BASE_PTRS;
+#endif
+
+#if defined(AOI_RESETS_ARRAY)
+/* Reset array */
+static const reset_ip_name_t s_aoiResets[] = AOI_RESETS_ARRAY;
+#endif
 
 #if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
 /*! @brief Pointers to aoi clocks for each instance. */
 static const clock_ip_name_t s_aoiClocks[] = AOI_CLOCKS;
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
-       /*******************************************************************************
-        * Prototypes
-        ******************************************************************************/
+
+#if defined(AOI_RESETS_ARRAY) || \
+   !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
+/*******************************************************************************
+ * Prototypes
+ ******************************************************************************/
 /*!
  * @brief Get instance number for AOI module.
  *
@@ -44,7 +62,7 @@ static uint32_t AOI_GetInstance(AOI_Type *base)
     /* Find the instance index from base address mappings. */
     for (instance = 0; instance < ARRAY_SIZE(s_aoiBases); instance++)
     {
-        if (s_aoiBases[instance] == base)
+        if (MSDK_REG_SECURE_ADDR(s_aoiBases[instance]) == MSDK_REG_SECURE_ADDR(base))
         {
             break;
         }
@@ -54,6 +72,7 @@ static uint32_t AOI_GetInstance(AOI_Type *base)
 
     return instance;
 }
+#endif
 
 /*!
  * brief Initializes an AOI instance for operation.
@@ -68,6 +87,10 @@ void AOI_Init(AOI_Type *base)
     /* Enable the clock gate from clock manager. */
     CLOCK_EnableClock(s_aoiClocks[AOI_GetInstance(base)]);
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
+
+#if defined(AOI_RESETS_ARRAY)
+    RESET_ReleasePeripheralReset(s_aoiResets[AOI_GetInstance(base)]);
+#endif
 }
 
 /*!
@@ -103,36 +126,52 @@ void AOI_Deinit(AOI_Type *base)
  */
 void AOI_GetEventLogicConfig(AOI_Type *base, aoi_event_t event, aoi_event_config_t *config)
 {
-    assert(event < FSL_FEATURE_AOI_EVENT_COUNT);
+    assert((uint32_t)event < (uint32_t)FSL_FEATURE_AOI_EVENT_COUNT);
     assert(config != NULL);
 
-    uint16_t value = 0;
+    uint16_t value;
+    uint16_t temp;
     /* Read BFCRT01 register at event index. */
     value = base->BFCRT[event].BFCRT01;
 
-    config->PT0AC = (aoi_input_config_t)((value & AOI_BFCRT01_PT0_AC_MASK) >> AOI_BFCRT01_PT0_AC_SHIFT);
-    config->PT0BC = (aoi_input_config_t)((value & AOI_BFCRT01_PT0_BC_MASK) >> AOI_BFCRT01_PT0_BC_SHIFT);
-    config->PT0CC = (aoi_input_config_t)((value & AOI_BFCRT01_PT0_CC_MASK) >> AOI_BFCRT01_PT0_CC_SHIFT);
-    config->PT0DC = (aoi_input_config_t)((value & AOI_BFCRT01_PT0_DC_MASK) >> AOI_BFCRT01_PT0_DC_SHIFT);
+    temp          = (value & AOI_BFCRT01_PT0_AC_MASK) >> AOI_BFCRT01_PT0_AC_SHIFT;
+    config->PT0AC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT01_PT0_BC_MASK) >> AOI_BFCRT01_PT0_BC_SHIFT;
+    config->PT0BC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT01_PT0_CC_MASK) >> AOI_BFCRT01_PT0_CC_SHIFT;
+    config->PT0CC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT01_PT0_DC_MASK) >> AOI_BFCRT01_PT0_DC_SHIFT;
+    config->PT0DC = (aoi_input_config_t)temp;
 
-    config->PT1AC = (aoi_input_config_t)((value & AOI_BFCRT01_PT1_AC_MASK) >> AOI_BFCRT01_PT1_AC_SHIFT);
-    config->PT1BC = (aoi_input_config_t)((value & AOI_BFCRT01_PT1_BC_MASK) >> AOI_BFCRT01_PT1_BC_SHIFT);
-    config->PT1CC = (aoi_input_config_t)((value & AOI_BFCRT01_PT1_CC_MASK) >> AOI_BFCRT01_PT1_CC_SHIFT);
-    config->PT1DC = (aoi_input_config_t)((value & AOI_BFCRT01_PT1_DC_MASK) >> AOI_BFCRT01_PT1_DC_SHIFT);
+    temp          = (value & AOI_BFCRT01_PT1_AC_MASK) >> AOI_BFCRT01_PT1_AC_SHIFT;
+    config->PT1AC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT01_PT1_BC_MASK) >> AOI_BFCRT01_PT1_BC_SHIFT;
+    config->PT1BC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT01_PT1_CC_MASK) >> AOI_BFCRT01_PT1_CC_SHIFT;
+    config->PT1CC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT01_PT1_DC_MASK) >> AOI_BFCRT01_PT1_DC_SHIFT;
+    config->PT1DC = (aoi_input_config_t)temp;
 
     /* Read BFCRT23 register at event index. */
-    value = 0;
     value = base->BFCRT[event].BFCRT23;
 
-    config->PT2AC = (aoi_input_config_t)((value & AOI_BFCRT23_PT2_AC_MASK) >> AOI_BFCRT23_PT2_AC_SHIFT);
-    config->PT2BC = (aoi_input_config_t)((value & AOI_BFCRT23_PT2_BC_MASK) >> AOI_BFCRT23_PT2_BC_SHIFT);
-    config->PT2CC = (aoi_input_config_t)((value & AOI_BFCRT23_PT2_CC_MASK) >> AOI_BFCRT23_PT2_CC_SHIFT);
-    config->PT2DC = (aoi_input_config_t)((value & AOI_BFCRT23_PT2_DC_MASK) >> AOI_BFCRT23_PT2_DC_SHIFT);
+    temp          = (value & AOI_BFCRT23_PT2_AC_MASK) >> AOI_BFCRT23_PT2_AC_SHIFT;
+    config->PT2AC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT23_PT2_BC_MASK) >> AOI_BFCRT23_PT2_BC_SHIFT;
+    config->PT2BC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT23_PT2_CC_MASK) >> AOI_BFCRT23_PT2_CC_SHIFT;
+    config->PT2CC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT23_PT2_DC_MASK) >> AOI_BFCRT23_PT2_DC_SHIFT;
+    config->PT2DC = (aoi_input_config_t)temp;
 
-    config->PT3AC = (aoi_input_config_t)((value & AOI_BFCRT23_PT3_AC_MASK) >> AOI_BFCRT23_PT3_AC_SHIFT);
-    config->PT3BC = (aoi_input_config_t)((value & AOI_BFCRT23_PT3_BC_MASK) >> AOI_BFCRT23_PT3_BC_SHIFT);
-    config->PT3CC = (aoi_input_config_t)((value & AOI_BFCRT23_PT3_CC_MASK) >> AOI_BFCRT23_PT3_CC_SHIFT);
-    config->PT3DC = (aoi_input_config_t)((value & AOI_BFCRT23_PT3_DC_MASK) >> AOI_BFCRT23_PT3_DC_SHIFT);
+    temp          = (value & AOI_BFCRT23_PT3_AC_MASK) >> AOI_BFCRT23_PT3_AC_SHIFT;
+    config->PT3AC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT23_PT3_BC_MASK) >> AOI_BFCRT23_PT3_BC_SHIFT;
+    config->PT3BC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT23_PT3_CC_MASK) >> AOI_BFCRT23_PT3_CC_SHIFT;
+    config->PT3CC = (aoi_input_config_t)temp;
+    temp          = (value & AOI_BFCRT23_PT3_DC_MASK) >> AOI_BFCRT23_PT3_DC_SHIFT;
+    config->PT3DC = (aoi_input_config_t)temp;
 }
 
 /*!
@@ -177,9 +216,9 @@ void AOI_GetEventLogicConfig(AOI_Type *base, aoi_event_t event, aoi_event_config
 void AOI_SetEventLogicConfig(AOI_Type *base, aoi_event_t event, const aoi_event_config_t *eventConfig)
 {
     assert(eventConfig != NULL);
-    assert(event < FSL_FEATURE_AOI_EVENT_COUNT);
+    assert((uint32_t)event < (uint32_t)FSL_FEATURE_AOI_EVENT_COUNT);
 
-    uint16_t value = 0;
+    uint16_t value;
     /* Calculate value to configure product term 0, 1 */
     value = AOI_BFCRT01_PT0_AC(eventConfig->PT0AC) | AOI_BFCRT01_PT0_BC(eventConfig->PT0BC) |
             AOI_BFCRT01_PT0_CC(eventConfig->PT0CC) | AOI_BFCRT01_PT0_DC(eventConfig->PT0DC) |
@@ -189,7 +228,6 @@ void AOI_SetEventLogicConfig(AOI_Type *base, aoi_event_t event, const aoi_event_
     base->BFCRT[event].BFCRT01 = value;
 
     /* Reset and calculate value to configure product term 2, 3 */
-    value = 0;
     value = AOI_BFCRT23_PT2_AC(eventConfig->PT2AC) | AOI_BFCRT23_PT2_BC(eventConfig->PT2BC) |
             AOI_BFCRT23_PT2_CC(eventConfig->PT2CC) | AOI_BFCRT23_PT2_DC(eventConfig->PT2DC) |
             AOI_BFCRT23_PT3_AC(eventConfig->PT3AC) | AOI_BFCRT23_PT3_BC(eventConfig->PT3BC) |

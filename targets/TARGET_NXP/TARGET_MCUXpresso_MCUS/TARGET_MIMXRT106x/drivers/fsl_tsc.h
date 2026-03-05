@@ -1,13 +1,13 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2019 NXP
+ * Copyright 2016-2020 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _FSL_TSC_H_
-#define _FSL_TSC_H_
+#ifndef FSL_TSC_H_
+#define FSL_TSC_H_
 
 #include "fsl_common.h"
 
@@ -20,7 +20,7 @@
  * Definitions
  ******************************************************************************/
 /*! @brief TSC driver version */
-#define FSL_TSC_DRIVER_VERSION (MAKE_VERSION(2, 0, 2)) /*!< Version 2.0.2. */
+#define FSL_TSC_DRIVER_VERSION (MAKE_VERSION(2, 0, 3)) /*!< Version 2.0.3. */
 
 /*!
  * @ Controller detection mode.
@@ -251,7 +251,7 @@ void TSC_Deinit(TSC_Type *base);
  *    config->measureDelayTime = 0xFFFFU;
  *    config->prechargeTime = 0xFFFFU;
  *    config->detectionMode = kTSC_4WireDetectionMode;
- * @endCode
+ * @endcode
  * @param config Pointer to "tsc_config_t" structure.
  */
 void TSC_GetDefaultConfig(tsc_config_t *config);
@@ -519,4 +519,6 @@ void TSC_DebugSetPortMode(TSC_Type *base, tsc_port_source_t port, tsc_port_mode_
 }
 #endif
 
-#endif /* _FSL_TSC_H_ */
+/*! @} */
+
+#endif /* FSL_TSC_H_ */

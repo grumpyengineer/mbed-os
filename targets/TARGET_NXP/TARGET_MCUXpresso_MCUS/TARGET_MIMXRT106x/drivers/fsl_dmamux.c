@@ -21,21 +21,23 @@
  * Prototypes
  ******************************************************************************/
 
+#if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
 /*!
  * @brief Get instance number for DMAMUX.
  *
  * @param base DMAMUX peripheral base address.
  */
 static uint32_t DMAMUX_GetInstance(DMAMUX_Type *base);
+#endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
 
 /*******************************************************************************
  * Variables
  ******************************************************************************/
 
+#if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
 /*! @brief Array to map DMAMUX instance number to base pointer. */
 static DMAMUX_Type *const s_dmamuxBases[] = DMAMUX_BASE_PTRS;
 
-#if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
 /*! @brief Array to map DMAMUX instance number to clock name. */
 static const clock_ip_name_t s_dmamuxClockName[] = DMAMUX_CLOCKS;
 #endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
@@ -43,6 +45,7 @@ static const clock_ip_name_t s_dmamuxClockName[] = DMAMUX_CLOCKS;
 /*******************************************************************************
  * Code
  ******************************************************************************/
+#if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
 static uint32_t DMAMUX_GetInstance(DMAMUX_Type *base)
 {
     uint32_t instance;
@@ -50,7 +53,7 @@ static uint32_t DMAMUX_GetInstance(DMAMUX_Type *base)
     /* Find the instance index from base address mappings. */
     for (instance = 0; instance < ARRAY_SIZE(s_dmamuxBases); instance++)
     {
-        if (s_dmamuxBases[instance] == base)
+        if (MSDK_REG_SECURE_ADDR(s_dmamuxBases[instance]) == MSDK_REG_SECURE_ADDR(base))
         {
             break;
         }
@@ -60,6 +63,7 @@ static uint32_t DMAMUX_GetInstance(DMAMUX_Type *base)
 
     return instance;
 }
+#endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
 
 /*!
  * brief Initializes the DMAMUX peripheral.

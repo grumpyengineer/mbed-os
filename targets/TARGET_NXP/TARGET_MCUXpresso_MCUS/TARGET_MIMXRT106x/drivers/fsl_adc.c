@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
+ * Copyright 2016-2020 NXP
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -44,7 +44,7 @@ static uint32_t ADC_GetInstance(ADC_Type *base)
     /* Find the instance index from base address mappings. */
     for (instance = 0; instance < ARRAY_SIZE(s_adcBases); instance++)
     {
-        if (s_adcBases[instance] == base)
+        if (MSDK_REG_SECURE_ADDR(s_adcBases[instance]) == MSDK_REG_SECURE_ADDR(base))
         {
             break;
         }
@@ -144,7 +144,7 @@ void ADC_GetDefaultConfig(adc_config_t *config)
     assert(NULL != config);
 
     /* Initializes the configure structure to zero. */
-    memset(config, 0, sizeof(*config));
+    (void)memset(config, 0, sizeof(*config));
 
     config->enableAsynchronousClockOutput = true;
     config->enableOverWrite               = false;
@@ -189,7 +189,7 @@ void ADC_GetDefaultConfig(adc_config_t *config)
 void ADC_SetChannelConfig(ADC_Type *base, uint32_t channelGroup, const adc_channel_config_t *config)
 {
     assert(NULL != config);
-    assert(channelGroup < FSL_FEATURE_ADC_CONVERSION_CONTROL_COUNT);
+    assert(channelGroup < (uint32_t)FSL_FEATURE_ADC_CONVERSION_CONTROL_COUNT);
 
     uint32_t tmp32;
 
@@ -244,7 +244,7 @@ status_t ADC_DoAutoCalibration(ADC_Type *base)
     while (0U != (base->GC & ADC_GC_CAL_MASK))
     {
         /* Check the CALF when the calibration is active. */
-        if (0U != (ADC_GetStatusFlags(base) & kADC_CalibrationFailedFlag))
+        if (0U != (ADC_GetStatusFlags(base) & (uint32_t)kADC_CalibrationFailedFlag))
         {
             status = kStatus_Fail;
             break;
@@ -256,13 +256,13 @@ status_t ADC_DoAutoCalibration(ADC_Type *base)
     {
         status = kStatus_Fail;
     }
-    if (0U != (ADC_GetStatusFlags(base) & kADC_CalibrationFailedFlag)) /* Check the CALF status. */
+    if (0U != (ADC_GetStatusFlags(base) & (uint32_t)kADC_CalibrationFailedFlag)) /* Check the CALF status. */
     {
         status = kStatus_Fail;
     }
 
     /* Clear conversion done flag. */
-    ADC_GetChannelConversionValue(base, 0U);
+    (void)ADC_GetChannelConversionValue(base, 0U);
 
 #if !(defined(FSL_FEATURE_ADC_SUPPORT_HARDWARE_TRIGGER_REMOVE) && FSL_FEATURE_ADC_SUPPORT_HARDWARE_TRIGGER_REMOVE)
     /* Restore original trigger mode. */
@@ -336,6 +336,7 @@ void ADC_SetHardwareCompareConfig(ADC_Type *base, const adc_hardware_compare_con
             tmp32 |= ADC_GC_ACFGT_MASK | ADC_GC_ACREN_MASK;
             break;
         default:
+            assert(false);
             break;
     }
     base->GC = tmp32;
@@ -382,11 +383,11 @@ void ADC_ClearStatusFlags(ADC_Type *base, uint32_t mask)
 {
     uint32_t tmp32 = 0;
 
-    if (0U != (mask & kADC_CalibrationFailedFlag))
+    if (0U != (mask & (uint32_t)kADC_CalibrationFailedFlag))
     {
         tmp32 |= ADC_GS_CALF_MASK;
     }
-    if (0U != (mask & kADC_ConversionActiveFlag))
+    if (0U != (mask & (uint32_t)kADC_ConversionActiveFlag))
     {
         tmp32 |= ADC_GS_ADACT_MASK;
     }

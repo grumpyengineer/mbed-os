@@ -1,21 +1,15 @@
 /*
- * Copyright 2017-2019 NXP
+ * Copyright 2017-2020 NXP
  * All rights reserved.
  *
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef _FSL_DCP_H_
-#define _FSL_DCP_H_
+#ifndef FSL_DCP_H_
+#define FSL_DCP_H_
 
 #include "fsl_common.h"
-
-/*! @brief DCP status return codes. */
-enum _dcp_status
-{
-    kStatus_DCP_Again = MAKE_STATUS(kStatusGroup_DCP, 0), /*!< Non-blocking function shall be called again. */
-};
 
 /*******************************************************************************
  * Definitions
@@ -26,12 +20,36 @@ enum _dcp_status
  * @{
  */
 /*! @name Driver version */
-/*@{*/
-/*! @brief DCP driver version. Version 2.1.1.
+/*! @{ */
+/*! @brief DCP driver version. Version 2.1.7.
  *
- * Current version: 2.1.1
+ * Current version: 2.1.7
  *
  * Change log:
+ *
+ * - Version 2.1.7
+ *  - Bug Fix
+ *   - Reduce optimization level for critical functions working with SRF.
+ * 
+ * - Version 2.1.6
+ *  - Bug Fix
+ *   - MISRA C-2012 issue fix.
+ *
+ * - Version 2.1.5
+ *  - Improvements
+ *   - Add support for DCACHE.
+ *
+ * - Version 2.1.4
+ *  - Bug Fix
+ *   - Fix CRC-32 computation issue on the code's block boundary size.
+ *
+ * - Version 2.1.3
+ *  - Bug Fix
+ *   - MISRA C-2012 issue fixed: rule 10.1, 10.3, 10.4, 11.9, 14.4, 16.4 and 17.7.
+ *
+ * - Version 2.1.2
+ *   - Fix sign-compare warning in dcp_reverse_and_copy.
+ *
  * - Version 2.1.1
  *   - Add DCP status clearing when channel operation is complete
  *
@@ -41,8 +59,14 @@ enum _dcp_status
  * - Version 2.0.0
  *   - Initial version
  */
-#define FSL_DCP_DRIVER_VERSION (MAKE_VERSION(2, 1, 1))
-/*@}*/
+#define FSL_DCP_DRIVER_VERSION (MAKE_VERSION(2, 1, 7))
+/*! @} */
+
+/*! @brief DCP status return codes. */
+enum _dcp_status
+{
+    kStatus_DCP_Again = MAKE_STATUS(kStatusGroup_DCP, 0), /*!< Non-blocking function shall be called again. */
+};
 
 /*! @brief DCP channel enable.
  *
@@ -149,6 +173,13 @@ typedef struct _dcp_config
 
 /*! @} */
 
+#ifndef DCP_USE_DCACHE
+#define DCP_USE_DCACHE 1
+#endif
+/* 1 - driver supports DCACHE, 0 - drivers does not support DCACHE */
+/* When enable (DCP_USE_DCACHE = 1) Input/output buffers and hash ctx should be in */
+/* non-cached memory or handled properly (Clean & Invalidate DCACHE) */
+
 /*******************************************************************************
  * AES Definitions
  *******************************************************************************/
@@ -187,11 +218,11 @@ typedef enum _dcp_hash_algo_t
 } dcp_hash_algo_t;
 
 /*! @brief DCP HASH Context size. */
-#define DCP_SHA_BLOCK_SIZE 128                 /*!< internal buffer block size  */
+#define DCP_SHA_BLOCK_SIZE  128U               /*!< internal buffer block size  */
 #define DCP_HASH_BLOCK_SIZE DCP_SHA_BLOCK_SIZE /*!< DCP hash block size  */
 
 /*! @brief DCP HASH Context size. */
-#define DCP_HASH_CTX_SIZE 58
+#define DCP_HASH_CTX_SIZE 64
 
 /*! @brief Storage type used to save hash context. */
 typedef struct _dcp_hash_ctx_t
@@ -494,7 +525,7 @@ status_t DCP_HASH_Init(DCP_Type *base, dcp_handle_t *handle, dcp_hash_ctx_t *ctx
  *
  * Add data to current HASH. This can be called repeatedly with an arbitrary amount of data to be
  * hashed. The functions blocks. If it returns kStatus_Success, the running hash
- * has been updated (DCP has processed the input data), so the memory at @ref input pointer
+ * has been updated (DCP has processed the input data), so the memory at the input pointer
  * can be released back to system. The DCP context buffer is updated with the running hash
  * and with all necessary information to support possible context switch.
  *
@@ -511,6 +542,7 @@ status_t DCP_HASH_Update(DCP_Type *base, dcp_hash_ctx_t *ctx, const uint8_t *inp
  *
  * Outputs the final hash (computed by DCP_HASH_Update()) and erases the context.
  *
+ * @param base DCP peripheral base address
  * @param[in,out] ctx Input hash context
  * @param[out] output Output hash data
  * @param[in,out] outputSize Optional parameter (can be passed as NULL). On function entry, it specifies the size of
@@ -549,4 +581,4 @@ status_t DCP_HASH(DCP_Type *base,
 }
 #endif
 
-#endif /* _FSL_DCP_H_ */
+#endif /* FSL_DCP_H_ */
