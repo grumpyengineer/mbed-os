@@ -61,11 +61,13 @@ outputs:
 - {id: CLK_1M.outFreq, value: 1 MHz}
 - {id: CLK_24M.outFreq, value: 24 MHz}
 - {id: CSI_CLK_ROOT.outFreq, value: 12 MHz}
+- {id: ENET2_125M_CLK.outFreq, value: 1.2 MHz}
 - {id: ENET_125M_CLK.outFreq, value: 2.4 MHz}
 - {id: ENET_25M_REF_CLK.outFreq, value: 1.2 MHz}
 - {id: FLEXIO1_CLK_ROOT.outFreq, value: 30 MHz}
 - {id: FLEXIO2_CLK_ROOT.outFreq, value: 30 MHz}
 - {id: FLEXSPI_CLK_ROOT.outFreq, value: 160 MHz}
+- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 24 MHz}
 - {id: GPT1_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: GPT2_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: IPG_CLK_ROOT.outFreq, value: 132 MHz}
@@ -481,12 +483,13 @@ outputs:
 - {id: CLK_1M.outFreq, value: 1 MHz}
 - {id: CLK_24M.outFreq, value: 24 MHz}
 - {id: CSI_CLK_ROOT.outFreq, value: 12 MHz}
+- {id: ENET2_125M_CLK.outFreq, value: 1.2 MHz}
 - {id: ENET_125M_CLK.outFreq, value: 2.4 MHz}
 - {id: ENET_25M_REF_CLK.outFreq, value: 1.2 MHz}
 - {id: FLEXIO1_CLK_ROOT.outFreq, value: 30 MHz}
 - {id: FLEXIO2_CLK_ROOT.outFreq, value: 30 MHz}
-- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 160 MHz}
 - {id: FLEXSPI_CLK_ROOT.outFreq, value: 160 MHz}
+- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 24 MHz}
 - {id: GPT1_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: GPT2_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: IPG_CLK_ROOT.outFreq, value: 150 MHz}
@@ -921,6 +924,7 @@ outputs:
 - {id: FLEXIO1_CLK_ROOT.outFreq, value: 1.5 MHz}
 - {id: FLEXIO2_CLK_ROOT.outFreq, value: 1.5 MHz}
 - {id: FLEXSPI_CLK_ROOT.outFreq, value: 24 MHz}
+- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 24 MHz}
 - {id: GPT1_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: GPT2_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: IPG_CLK_ROOT.outFreq, value: 12 MHz}
