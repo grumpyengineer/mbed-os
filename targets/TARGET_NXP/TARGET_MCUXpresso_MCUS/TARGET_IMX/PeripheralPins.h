@@ -48,4 +48,8 @@ extern const PinMap PinMap_SPI_SSEL[];
 /************PWM***************/
 extern const PinMap PinMap_PWM[];
 
+/************CAN***************/
+extern const PinMap PinMap_CAN_TD[];
+extern const PinMap PinMap_CAN_RD[];
+
 #endif

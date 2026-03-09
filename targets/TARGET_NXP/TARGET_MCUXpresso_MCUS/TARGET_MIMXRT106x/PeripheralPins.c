@@ -230,3 +230,36 @@ const PinMap PinMap_PWM[] = {
     {NC   , NC    , 0}
 };
 
+/************CAN***************/
+const PinMap PinMap_CAN_TD[] = {
+    {GPIO_AD_B1_08, CAN_1, 2},
+    {GPIO_B0_02, CAN_1, 2},
+    {GPIO_EMC_17, CAN_1, 3},
+    {GPIO_SD_B1_02, CAN_1, 4},
+    {GPIO_AD_B0_02, CAN_2, 0},
+    {GPIO_EMC_09, CAN_2, 3},
+    {GPIO_B1_08, CAN_2, 6},
+    {GPIO_AD_B0_14, CAN_2, 6},
+    {GPIO_AD_B0_10, CAN_3, 8},
+    {GPIO_AD_B0_14, CAN_3, 8},
+    {GPIO_EMC_36, CAN_3, 9},
+    {NC   , NC    , 0}
+};
+
+const PinMap PinMap_CAN_RD[] = {
+    {GPIO_AD_B1_09, CAN_1, ((2U << DAISY_REG_VALUE_SHIFT) | (0x44C << DAISY_REG_SHIFT) | 2)},
+    {GPIO_B0_03, CAN_1, ((3U << DAISY_REG_VALUE_SHIFT) | (0x44C << DAISY_REG_SHIFT) | 2)},
+    {GPIO_EMC_18, CAN_1, ((1U << DAISY_REG_VALUE_SHIFT) | (0x44C << DAISY_REG_SHIFT) | 3)},
+    {GPIO_SD_B1_03, CAN_1, ((0U << DAISY_REG_VALUE_SHIFT) | (0x44C << DAISY_REG_SHIFT) | 4)},
+    {GPIO_AD_B0_03, CAN_2, ((1U << DAISY_REG_VALUE_SHIFT) | (0x450 << DAISY_REG_SHIFT) | 0)},
+    {GPIO_EMC_10, CAN_2, ((0U << DAISY_REG_VALUE_SHIFT) | (0x450 << DAISY_REG_SHIFT) | 3)},
+    {GPIO_AD_B0_15, CAN_2, ((2U << DAISY_REG_VALUE_SHIFT) | (0x450 << DAISY_REG_SHIFT) | 6)},
+    {GPIO_B1_09, CAN_2, ((3U << DAISY_REG_VALUE_SHIFT) | (0x450 << DAISY_REG_SHIFT) | 6)},
+    {GPIO_AD_B0_11, CAN_3, ((2U << DAISY_REG_VALUE_SHIFT) | (0x78C << DAISY_REG_SHIFT) | 8)},
+    {GPIO_AD_B0_15, CAN_3, ((1U << DAISY_REG_VALUE_SHIFT) | (0x78C << DAISY_REG_SHIFT) | 8)},
+    {GPIO_EMC_37, CAN_3, ((0U << DAISY_REG_VALUE_SHIFT) | (0x78C << DAISY_REG_SHIFT) | 9)},
+    {NC   , NC    , 0}
+};
+
+
+

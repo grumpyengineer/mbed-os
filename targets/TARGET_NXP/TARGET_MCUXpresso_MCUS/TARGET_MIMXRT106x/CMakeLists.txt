@@ -32,6 +32,7 @@ target_sources(mbed-mimxrt106x
         PeripheralPins.c
         pinmap.c
         mbed_overrides.c
+        can_api.c
 
         device/system_MIMXRT1062.c
 

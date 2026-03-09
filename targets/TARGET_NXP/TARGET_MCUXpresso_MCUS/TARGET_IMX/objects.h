@@ -68,6 +68,10 @@ struct trng_s {
     uint8_t dummy;
 };
 
+struct can_s {
+    uint32_t instance;
+};
+
 #if DEVICE_FLASH
 struct flash_s {
     uint8_t dummy;

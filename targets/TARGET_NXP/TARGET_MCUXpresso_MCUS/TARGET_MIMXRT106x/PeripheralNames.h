@@ -147,6 +147,14 @@ typedef enum {
     SPI_4 = 4,
 } SPIName;
 
+#define DEVICE_CAN_COUNT 3
+typedef enum {
+    CAN_1 = 1,
+    CAN_2 = 2,
+    CAN_3 = 3,
+} CANName;
+
+
 #ifdef __cplusplus
 }
 #endif

@@ -4882,7 +4882,8 @@ mode is recommended for target MCUs with small amounts of flash and RAM.",
             "SPISLAVE",
             "TRNG",
             "WATCHDOG",
-            "USBDEVICE"
+            "USBDEVICE",
+            "CAN"
         ],
         "overrides": {
             "deep-sleep-latency": 10
