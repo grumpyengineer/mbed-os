@@ -26,7 +26,10 @@
 #include <math.h>
 #include <string.h>
 
-#define CAN_NUM    2
+#define CAN_NUM    3
+
+/* Array of CAN peripheral base address. */
+static CAN_Type *const can_addrs[] = CAN_BASE_PTRS;
 
 /* Acceptance filter mode in AFMR register */
 #define ACCF_OFF                0x01
