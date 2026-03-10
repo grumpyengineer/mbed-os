@@ -69,7 +69,7 @@ struct trng_s {
 };
 
 struct can_s {
-    uint32_t instance;
+    uint32_t index;
 };
 
 #if DEVICE_FLASH
