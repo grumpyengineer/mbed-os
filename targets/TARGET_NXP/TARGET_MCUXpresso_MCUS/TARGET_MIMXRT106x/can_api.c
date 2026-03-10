@@ -26,7 +26,12 @@
 #include <math.h>
 #include <string.h>
 
+#include <stdio.h>
+
 #define CAN_NUM    3
+
+extern uint32_t can_get_clock(void);
+
 
 /* Array of CAN peripheral base address. */
 static CAN_Type *const can_addrs[] = CAN_BASE_PTRS;
@@ -96,11 +101,6 @@ void can_irq_set(can_t *obj, CanIrqType type, uint32_t enable) {
 
 }
 
-static int can_pclk(can_t *obj) {
-  return 0;
-}
-
-
 static unsigned int can_speed(unsigned int sclk, unsigned int pclk, unsigned int cclk, unsigned char psjw) {
 
   return 0;
@@ -113,11 +113,39 @@ void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
     pin_mode(pinmap->rd_pin, PullNone);
     pin_function(pinmap->td_pin, pinmap->td_function);
     pin_mode(pinmap->td_pin, PullNone);
+	obj->index = pinmap->peripheral;
+    MBED_ASSERT((int)obj->index != NC);
     
+    printf("Init can %u %d\n", obj->index, hz);
     
     can_reset(obj);
 
-    can_frequency(obj, hz);
+    flexcan_config_t flexcanConfig;
+    flexcan_rx_mb_config_t mbConfig;
+    flexcan_timing_config_t timing_config;
+
+    uint8_t node_type;
+
+    FLEXCAN_GetDefaultConfig(&flexcanConfig);
+
+    flexcanConfig.baudRate = hz;
+
+    memset(&timing_config, 0, sizeof(flexcan_timing_config_t));
+
+    if (FLEXCAN_CalculateImprovedTimingValues(flexcanConfig.baudRate, can_get_clock(), &timing_config))
+    {
+        /* Update the improved timing configuration*/
+        memcpy(&(flexcanConfig.timingConfig), &timing_config, sizeof(flexcan_timing_config_t));
+    }
+    else
+    {
+        printf("No found Improved Timing Configuration. Just used default configuration\n\n");
+    }
+
+
+    FLEXCAN_Init(can_addrs[obj->index], &flexcanConfig, can_get_clock());
+    
+    printf("Init can init done\n");
 
 }
 
@@ -148,10 +176,11 @@ void can_init(can_t *obj, PinName rd, PinName td) {
 }
 
 void can_free(can_t *obj) {
+	FLEXCAN_Deinit(can_addrs[obj->index]);
 }
 
 int can_frequency(can_t *obj, int f) {
-        return 0;
+	return 0;
 }
 
 int can_write(can_t *obj, CAN_Message msg) {
@@ -167,6 +196,7 @@ int can_read(can_t *obj, CAN_Message *msg, int handle) {
 }
 
 void can_reset(can_t *obj) {
+	return;
 }
 
 unsigned char can_rderror(can_t *obj) {
