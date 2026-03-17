@@ -32,32 +32,13 @@
 
 extern uint32_t can_get_clock(void);
 
+status_t returnstatus;
 
 /* Array of CAN peripheral base address. */
 static CAN_Type *const can_addrs[] = CAN_BASE_PTRS;
 
-/* Acceptance filter mode in AFMR register */
-#define ACCF_OFF                0x01
-#define ACCF_BYPASS             0x02
-#define ACCF_ON                 0x00
-#define ACCF_FULLCAN            0x04
-
-/* There are several bit timing calculators on the internet.
-http://www.port.de/engl/canprod/sv_req_form.html
-http://www.kvaser.com/can/index.htm
-*/
-
-// Type definition to hold a CAN message
-struct CANMsg {
-    unsigned int  reserved1 : 16;
-    unsigned int  dlc       :  4; // Bits 16..19: DLC - Data Length Counter
-    unsigned int  reserved0 : 10;
-    unsigned int  rtr       :  1; // Bit 30: Set if this is a RTR message
-    unsigned int  type      :  1; // Bit 31: Set if this is a 29-bit ID message
-    unsigned int  id;             // CAN Message ID (11-bit or 29-bit)
-    unsigned char data[8];        // CAN Message Data Bytes 0-7
-};
-typedef struct CANMsg CANMsg;
+#define RX_MESSAGE_BUFFER_NUM (10)
+#define TX_MESSAGE_BUFFER_NUM (9)
 
 static uintptr_t can_irq_contexts[CAN_NUM] = {0};
 static can_irq_handler irq_handler;
@@ -69,8 +50,60 @@ static uint32_t can_disable(can_t *obj) {
 static inline void can_enable(can_t *obj) {
 }
 
+//static FLEXCAN_CALLBACK(flexcan_callback)
+static void flexcan_callback(CAN_Type * base, flexcan_handle_t * handle, status_t status, uint32_t result, void *userData)
+{
+	returnstatus = status;
+	return;
+}
+
 int can_mode(can_t *obj, CanMode mode) {
     int success = 0;
+	CAN_Type *base = can_addrs[obj->index];
+	uint32_t ctrl1;
+	uint32_t mcr;
+	
+    ctrl1 = base->CTRL1;
+	mcr = base->MCR;
+	
+    switch (mode) {
+        case MODE_NORMAL:
+            // Clear all special modes
+			// Disable loopback and self-reception
+			ctrl1 &= ~(CAN_CTRL1_LPB_MASK);
+			mcr |= CAN_MCR_SRXDIS_MASK;
+			// Disable listen-only mode 
+			ctrl1 &= ~(CAN_CTRL1_LOM_MASK);
+            success = 1;
+            break;
+        case MODE_SILENT:
+            // Set listen-only mode
+			ctrl1 |= CAN_CTRL1_LOM_MASK;
+			// Disable loopback and self-reception
+			ctrl1 &= ~(CAN_CTRL1_LPB_MASK);
+			mcr |= CAN_MCR_SRXDIS_MASK;			
+            success = 1;
+            break;
+        case MODE_TEST_LOCAL:
+            // Set self-test mode and clear listen-only mode
+			ctrl1 |= CAN_CTRL1_LPB_MASK;
+			mcr &= ~(CAN_MCR_SRXDIS_MASK);
+			// Disable listen-only mode
+			ctrl1 &= ~(CAN_CTRL1_LOM_MASK);
+            success = 1;
+            break;
+        case MODE_RESET:
+        case MODE_TEST_SILENT:
+        case MODE_TEST_GLOBAL:
+        default:
+            success = 0;
+            break;
+    }
+
+	if(success == 1) {
+		base->CTRL1 = ctrl1;
+		base->MCR = mcr;
+	}
 
     return success;
 }
@@ -117,34 +150,27 @@ void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
     MBED_ASSERT((int)obj->index != NC);
     
     printf("Init can %u %d\n", obj->index, hz);
+  
+    FLEXCAN_GetDefaultConfig(&obj->flexcanConfig);
+
+    obj->flexcanConfig.baudRate = hz;
+#if 0
+    memset(&obj->timing_config, 0, sizeof(flexcan_timing_config_t));
     
-    can_reset(obj);
-
-    flexcan_config_t flexcanConfig;
-    flexcan_rx_mb_config_t mbConfig;
-    flexcan_timing_config_t timing_config;
-
-    uint8_t node_type;
-
-    FLEXCAN_GetDefaultConfig(&flexcanConfig);
-
-    flexcanConfig.baudRate = hz;
-
-    memset(&timing_config, 0, sizeof(flexcan_timing_config_t));
-
-    if (FLEXCAN_CalculateImprovedTimingValues(flexcanConfig.baudRate, can_get_clock(), &timing_config))
+    if (FLEXCAN_CalculateImprovedTimingValues(obj->flexcanConfig.baudRate, can_get_clock(), &obj->timing_config))
     {
         /* Update the improved timing configuration*/
-        memcpy(&(flexcanConfig.timingConfig), &timing_config, sizeof(flexcan_timing_config_t));
+        memcpy(&(obj->flexcanConfig.timingConfig), &obj->timing_config, sizeof(flexcan_timing_config_t));
     }
     else
     {
         printf("No found Improved Timing Configuration. Just used default configuration\n\n");
     }
-
-
-    FLEXCAN_Init(can_addrs[obj->index], &flexcanConfig, can_get_clock());
+#endif
+    FLEXCAN_Init(can_addrs[obj->index], &obj->flexcanConfig, can_get_clock());
     
+	FLEXCAN_TransferCreateHandle(can_addrs[obj->index], &obj->flexcanHandle, flexcan_callback, NULL);
+	   
     printf("Init can init done\n");
 
 }
@@ -185,8 +211,78 @@ int can_frequency(can_t *obj, int f) {
 
 int can_write(can_t *obj, CAN_Message msg) {
 
+	static flexcan_frame_t frame;
+	flexcan_mb_transfer_t txXfer;
+	uint8_t i;
+	
+	status_t ret;
+	
+	printf("return status %d\n", returnstatus);
 
-    return 0;
+	
+	if(msg.format == CANStandard) {
+		frame.id     = FLEXCAN_ID_STD(msg.id);
+		frame.format = (uint8_t)kFLEXCAN_FrameFormatStandard;
+	}
+	else {
+		frame.id     = FLEXCAN_ID_EXT(msg.id);
+		frame.format = (uint8_t)kFLEXCAN_FrameFormatExtend;	
+	}
+	
+	if(msg.type == CANData) {
+		frame.type   = (uint8_t)kFLEXCAN_FrameTypeData;
+		frame.dataWord0 = 0;
+		frame.dataWord1 = 0;
+		for(i=0; i<msg.len; i++){
+			switch(i) {
+				case 0:
+					frame.dataByte0 = msg.data[0];
+					break;
+				case 1:
+					frame.dataByte1 = msg.data[1];
+					break;
+				case 2:
+					frame.dataByte2 = msg.data[2];
+					break;
+				case 3:
+					frame.dataByte3 = msg.data[3];
+					break;
+				case 4:
+					frame.dataByte4 = msg.data[4];
+					break;
+				case 5:
+					frame.dataByte5 = msg.data[5];
+					break;
+				case 6:
+					frame.dataByte6 = msg.data[6];
+					break;
+				case 7:
+					frame.dataByte7 = msg.data[7];
+					break;
+				default:
+					break;
+			}
+		}
+	}
+	else{
+		frame.type   = (uint8_t)kFLEXCAN_FrameTypeRemote;
+	}
+	
+	frame.length = (uint8_t)msg.len;
+		
+	txXfer.mbIdx = (uint8_t)(TX_MESSAGE_BUFFER_NUM + obj->index);
+	txXfer.frame = &frame;
+	
+	FLEXCAN_SetTxMbConfig(can_addrs[obj->index], txXfer.mbIdx, true);
+	
+	ret = FLEXCAN_TransferSendNonBlocking(can_addrs[obj->index], &obj->flexcanHandle, &txXfer);
+
+	printf("Can write ret %d\n", ret);
+
+	if(ret == kStatus_Success)
+		return 1;
+		
+	return 0;
 }
 
 int can_read(can_t *obj, CAN_Message *msg, int handle) {
@@ -196,15 +292,33 @@ int can_read(can_t *obj, CAN_Message *msg, int handle) {
 }
 
 void can_reset(can_t *obj) {
-	return;
+	CAN_Type *base = can_addrs[obj->index];
+	uint32_t u32TimeoutCount = 0U;
+
+    /* Assert Soft Reset Signal. */
+    base->MCR |= CAN_MCR_SOFTRST_MASK;
+    /* Wait until FlexCAN reset completes. */
+	u32TimeoutCount = (uint32_t)FLEXCAN_WAIT_TIMEOUT * 20U;
+	while ((CAN_MCR_SOFTRST_MASK == (base->MCR & CAN_MCR_SOFTRST_MASK)) && (u32TimeoutCount > 0U))
+	{
+		u32TimeoutCount--;
+	}
 }
 
 unsigned char can_rderror(can_t *obj) {
-  return 0;
+	unsigned char errCount;
+	
+	FLEXCAN_GetBusErrCount(can_addrs[obj->index], NULL, &errCount);
+	
+	return errCount;
 }
 
 unsigned char can_tderror(can_t *obj) {
-  return 0;
+	unsigned char errCount;
+	
+	FLEXCAN_GetBusErrCount(can_addrs[obj->index], &errCount, NULL);
+	
+	return errCount;
 }
 
 void can_monitor(can_t *obj, int silent) {

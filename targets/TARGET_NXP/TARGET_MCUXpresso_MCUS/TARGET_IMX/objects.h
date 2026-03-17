@@ -21,6 +21,7 @@
 #include "PortNames.h"
 #include "PeripheralNames.h"
 #include "PinNames.h"
+#include "fsl_flexcan.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -70,6 +71,10 @@ struct trng_s {
 
 struct can_s {
     uint32_t index;
+    flexcan_handle_t flexcanHandle;
+    flexcan_config_t flexcanConfig;
+    flexcan_rx_mb_config_t mbConfig;
+    flexcan_timing_config_t timing_config;
 };
 
 #if DEVICE_FLASH
