@@ -50,6 +50,28 @@ static uint32_t can_disable(can_t *obj) {
 static inline void can_enable(can_t *obj) {
 }
 
+static void CAN_EnterFreezeMode(CAN_Type *base)
+{
+    /* Set Freeze, Halt bits. */
+    base->MCR |= CAN_MCR_FRZ_MASK;
+    base->MCR |= CAN_MCR_HALT_MASK;
+    while (0U == (base->MCR & CAN_MCR_FRZACK_MASK))
+    {
+    }
+}
+
+static void CAN_ExitFreezeMode(CAN_Type *base)
+{
+    /* Clear Freeze, Halt bits. */
+    base->MCR &= ~CAN_MCR_HALT_MASK;
+    base->MCR &= ~CAN_MCR_FRZ_MASK;
+
+    /* Wait until the FlexCAN Module exit freeze mode. */
+    while (0U != (base->MCR & CAN_MCR_FRZACK_MASK))
+    {
+    }
+}
+
 //static FLEXCAN_CALLBACK(flexcan_callback)
 static void flexcan_callback(CAN_Type * base, flexcan_handle_t * handle, status_t status, uint32_t result, void *userData)
 {
@@ -101,8 +123,10 @@ int can_mode(can_t *obj, CanMode mode) {
     }
 
 	if(success == 1) {
+		CAN_EnterFreezeMode(base);
 		base->CTRL1 = ctrl1;
 		base->MCR = mcr;
+		CAN_ExitFreezeMode(base);
 	}
 
     return success;
@@ -140,6 +164,8 @@ static unsigned int can_speed(unsigned int sclk, unsigned int pclk, unsigned int
 }
 
 void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
+	CAN_Type *base;
+	flexcan_rx_fifo_config_t rxFifoConfig;
 
     // Map pins
     pin_function(pinmap->rd_pin, pinmap->rd_function);
@@ -150,27 +176,58 @@ void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
     MBED_ASSERT((int)obj->index != NC);
     
     printf("Init can %u %d\n", obj->index, hz);
+    
+    base = can_addrs[obj->index];
   
-    FLEXCAN_GetDefaultConfig(&obj->flexcanConfig);
+    FLEXCAN_GetDefaultConfig(&(obj->flexcanConfig));
 
     obj->flexcanConfig.baudRate = hz;
-#if 0
-    memset(&obj->timing_config, 0, sizeof(flexcan_timing_config_t));
+
+#if 0 // I think that FLEXCAN_CalculateImprovedTimingValues is broken in this SDK
+    memset(&(obj->timingConfig), 0, sizeof(flexcan_timing_config_t));
     
-    if (FLEXCAN_CalculateImprovedTimingValues(obj->flexcanConfig.baudRate, can_get_clock(), &obj->timing_config))
+    if(FLEXCAN_CalculateImprovedTimingValues(obj->flexcanConfig.baudRate, can_get_clock(), &(obj->timingConfig)))
     {
         /* Update the improved timing configuration*/
-        memcpy(&(obj->flexcanConfig.timingConfig), &obj->timing_config, sizeof(flexcan_timing_config_t));
+		printf("Timing %d %d %d %d %d\n", obj->flexcanConfig.timingConfig.preDivider, obj->flexcanConfig.timingConfig.rJumpwidth, obj->flexcanConfig.timingConfig.phaseSeg1, obj->flexcanConfig.timingConfig.phaseSeg2, obj->flexcanConfig.timingConfig.propSeg);
+            
+        memcpy(&(obj->flexcanConfig.timingConfig), &(obj->timingConfig), sizeof(flexcan_timing_config_t));
+
+		printf("Timing %d %d %d %d %d\n", obj->flexcanConfig.timingConfig.preDivider, obj->flexcanConfig.timingConfig.rJumpwidth, obj->flexcanConfig.timingConfig.phaseSeg1, obj->flexcanConfig.timingConfig.phaseSeg2, obj->flexcanConfig.timingConfig.propSeg);
+
     }
     else
     {
         printf("No found Improved Timing Configuration. Just used default configuration\n\n");
     }
 #endif
-    FLEXCAN_Init(can_addrs[obj->index], &obj->flexcanConfig, can_get_clock());
+
+    FLEXCAN_Init(base, &(obj->flexcanConfig), can_get_clock());
     
-	FLEXCAN_TransferCreateHandle(can_addrs[obj->index], &obj->flexcanHandle, flexcan_callback, NULL);
-	   
+	FLEXCAN_TransferCreateHandle(base, &(obj->flexcanHandle), flexcan_callback, NULL);
+
+	can_reset(obj);
+
+	CAN_EnterFreezeMode(base);
+
+	/* Enable auto-recovery from bus-off */
+	base->CTRL1 &= ~(CAN_CTRL1_BOFFREC_MASK);
+
+	
+	CAN_ExitFreezeMode(base);
+		
+	memset(&(obj->rxFifoFilter), 0, sizeof(obj->rxFifoFilter));
+	
+	rxFifoConfig.idFilterTable = obj->rxFifoFilter;
+	rxFifoConfig.idFilterType  = kFLEXCAN_RxFifoFilterTypeA;
+	rxFifoConfig.idFilterNum   = sizeof(obj->rxFifoFilter) / sizeof(obj->rxFifoFilter[0]);
+	rxFifoConfig.priority      = kFLEXCAN_RxFifoPrioHigh;
+	FLEXCAN_SetRxFifoConfig(base, &rxFifoConfig, true);
+
+
+
+	FLEXCAN_SetRxFifoGlobalMask(base, 0);
+
     printf("Init can init done\n");
 
 }
@@ -210,8 +267,7 @@ int can_frequency(can_t *obj, int f) {
 }
 
 int can_write(can_t *obj, CAN_Message msg) {
-
-	static flexcan_frame_t frame;
+	CAN_Type *base = can_addrs[obj->index];
 	flexcan_mb_transfer_t txXfer;
 	uint8_t i;
 	
@@ -219,45 +275,52 @@ int can_write(can_t *obj, CAN_Message msg) {
 	
 	printf("return status %d\n", returnstatus);
 
+	if((base->ESR1 & 0x30) >= 0x10)
+	{
+		printf("Bus Off\n");
+		return 0;
+	}
+
 	
 	if(msg.format == CANStandard) {
-		frame.id     = FLEXCAN_ID_STD(msg.id);
-		frame.format = (uint8_t)kFLEXCAN_FrameFormatStandard;
+		obj->txFrame.id     = FLEXCAN_ID_STD(msg.id);
+		obj->txFrame.format = (uint8_t)kFLEXCAN_FrameFormatStandard;
 	}
 	else {
-		frame.id     = FLEXCAN_ID_EXT(msg.id);
-		frame.format = (uint8_t)kFLEXCAN_FrameFormatExtend;	
+		obj->txFrame.id     = FLEXCAN_ID_EXT(msg.id);
+		obj->txFrame.format = (uint8_t)kFLEXCAN_FrameFormatExtend;	
 	}
 	
 	if(msg.type == CANData) {
-		frame.type   = (uint8_t)kFLEXCAN_FrameTypeData;
-		frame.dataWord0 = 0;
-		frame.dataWord1 = 0;
+		obj->txFrame.type   = (uint8_t)kFLEXCAN_FrameTypeData;
+		obj->txFrame.dataWord0 = 0;
+		obj->txFrame.dataWord1 = 0;
+		// I can't think of a nice way to do this with variable data lengths!
 		for(i=0; i<msg.len; i++){
 			switch(i) {
 				case 0:
-					frame.dataByte0 = msg.data[0];
+					obj->txFrame.dataByte0 = msg.data[0];
 					break;
 				case 1:
-					frame.dataByte1 = msg.data[1];
+					obj->txFrame.dataByte1 = msg.data[1];
 					break;
 				case 2:
-					frame.dataByte2 = msg.data[2];
+					obj->txFrame.dataByte2 = msg.data[2];
 					break;
 				case 3:
-					frame.dataByte3 = msg.data[3];
+					obj->txFrame.dataByte3 = msg.data[3];
 					break;
 				case 4:
-					frame.dataByte4 = msg.data[4];
+					obj->txFrame.dataByte4 = msg.data[4];
 					break;
 				case 5:
-					frame.dataByte5 = msg.data[5];
+					obj->txFrame.dataByte5 = msg.data[5];
 					break;
 				case 6:
-					frame.dataByte6 = msg.data[6];
+					obj->txFrame.dataByte6 = msg.data[6];
 					break;
 				case 7:
-					frame.dataByte7 = msg.data[7];
+					obj->txFrame.dataByte7 = msg.data[7];
 					break;
 				default:
 					break;
@@ -265,17 +328,17 @@ int can_write(can_t *obj, CAN_Message msg) {
 		}
 	}
 	else{
-		frame.type   = (uint8_t)kFLEXCAN_FrameTypeRemote;
+		obj->txFrame.type   = (uint8_t)kFLEXCAN_FrameTypeRemote;
 	}
 	
-	frame.length = (uint8_t)msg.len;
+	obj->txFrame.length = (uint8_t)msg.len;
 		
 	txXfer.mbIdx = (uint8_t)(TX_MESSAGE_BUFFER_NUM + obj->index);
-	txXfer.frame = &frame;
+	txXfer.frame = &obj->txFrame;
 	
-	FLEXCAN_SetTxMbConfig(can_addrs[obj->index], txXfer.mbIdx, true);
+	FLEXCAN_SetTxMbConfig(base, txXfer.mbIdx, true);
 	
-	ret = FLEXCAN_TransferSendNonBlocking(can_addrs[obj->index], &obj->flexcanHandle, &txXfer);
+	ret = FLEXCAN_TransferSendNonBlocking(base, &obj->flexcanHandle, &txXfer);
 
 	printf("Can write ret %d\n", ret);
 
@@ -286,23 +349,32 @@ int can_write(can_t *obj, CAN_Message msg) {
 }
 
 int can_read(can_t *obj, CAN_Message *msg, int handle) {
+	CAN_Type *base = can_addrs[obj->index];
+	status_t ret;
+	flexcan_frame_t rxFrame;
 
+	ret = FLEXCAN_ReadRxFifo(base, &rxFrame);
+	
+	if(ret == kStatus_Success)
+		return 1;
 
     return 0;
 }
 
 void can_reset(can_t *obj) {
 	CAN_Type *base = can_addrs[obj->index];
-	uint32_t u32TimeoutCount = 0U;
+	
+	if((base->ESR1 & 0x30) == 0x00)
+		printf("Error Active\n");
+	if((base->ESR1 & 0x30) == 0x10)
+		printf("Error Passive\n");
+	if((base->ESR1 & 0x30) >= 0x20)
+		printf("Bus Off\n");
 
-    /* Assert Soft Reset Signal. */
-    base->MCR |= CAN_MCR_SOFTRST_MASK;
-    /* Wait until FlexCAN reset completes. */
-	u32TimeoutCount = (uint32_t)FLEXCAN_WAIT_TIMEOUT * 20U;
-	while ((CAN_MCR_SOFTRST_MASK == (base->MCR & CAN_MCR_SOFTRST_MASK)) && (u32TimeoutCount > 0U))
-	{
-		u32TimeoutCount--;
-	}
+	
+	CAN_EnterFreezeMode(base);
+	base->ECR &= ~(CAN_ECR_TXERRCNT_MASK | CAN_ECR_RXERRCNT_MASK);
+	CAN_ExitFreezeMode(base);
 }
 
 unsigned char can_rderror(can_t *obj) {

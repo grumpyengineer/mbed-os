@@ -74,7 +74,9 @@ struct can_s {
     flexcan_handle_t flexcanHandle;
     flexcan_config_t flexcanConfig;
     flexcan_rx_mb_config_t mbConfig;
-    flexcan_timing_config_t timing_config;
+    flexcan_timing_config_t timingConfig;
+	flexcan_frame_t txFrame;
+	uint32_t rxFifoFilter[4];
 };
 
 #if DEVICE_FLASH
