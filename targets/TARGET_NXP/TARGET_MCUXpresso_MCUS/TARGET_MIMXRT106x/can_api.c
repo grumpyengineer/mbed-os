@@ -182,6 +182,8 @@ void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
     FLEXCAN_GetDefaultConfig(&(obj->flexcanConfig));
 
     obj->flexcanConfig.baudRate = hz;
+    // Set individual mask mode
+	//obj->flexcanConfig.enableIndividMask = true;
 
 #if 0 // I think that FLEXCAN_CalculateImprovedTimingValues is broken in this SDK
     memset(&(obj->timingConfig), 0, sizeof(flexcan_timing_config_t));
@@ -210,21 +212,25 @@ void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
 
 	CAN_EnterFreezeMode(base);
 
-	/* Enable auto-recovery from bus-off */
+	// Enable auto-recovery from bus-off
 	base->CTRL1 &= ~(CAN_CTRL1_BOFFREC_MASK);
+	// Disable self reception
+	base->MCR |= CAN_MCR_SRXDIS_MASK;
+
 
 	
 	CAN_ExitFreezeMode(base);
-		
-	memset(&(obj->rxFifoFilter), 0, sizeof(obj->rxFifoFilter));
-	
+
+	obj->rxFifoFilter[0] = FLEXCAN_RX_FIFO_STD_FILTER_TYPE_A(1, 0, 0);
+	obj->rxFifoFilter[0] = FLEXCAN_RX_FIFO_STD_FILTER_TYPE_A(1, 1, 0);
+	obj->rxFifoFilter[0] = FLEXCAN_RX_FIFO_STD_FILTER_TYPE_A(2, 0, 0);
+	obj->rxFifoFilter[0] = FLEXCAN_RX_FIFO_STD_FILTER_TYPE_A(2, 1, 0);
+
 	rxFifoConfig.idFilterTable = obj->rxFifoFilter;
 	rxFifoConfig.idFilterType  = kFLEXCAN_RxFifoFilterTypeA;
 	rxFifoConfig.idFilterNum   = sizeof(obj->rxFifoFilter) / sizeof(obj->rxFifoFilter[0]);
 	rxFifoConfig.priority      = kFLEXCAN_RxFifoPrioHigh;
 	FLEXCAN_SetRxFifoConfig(base, &rxFifoConfig, true);
-
-
 
 	FLEXCAN_SetRxFifoGlobalMask(base, 0);
 
@@ -353,10 +359,46 @@ int can_read(can_t *obj, CAN_Message *msg, int handle) {
 	status_t ret;
 	flexcan_frame_t rxFrame;
 
-	ret = FLEXCAN_ReadRxFifo(base, &rxFrame);
+	if(FLEXCAN_GetMbStatusFlags(base, (uint32_t)kFLEXCAN_RxFifoFrameAvlFlag) != 0)
+	{
+		ret = FLEXCAN_ReadRxFifo(base, &rxFrame);
 	
-	if(ret == kStatus_Success)
-		return 1;
+		printf("Can read ret %d\n", ret);
+		
+		FLEXCAN_ClearMbStatusFlags(base, (uint32_t)kFLEXCAN_RxFifoFrameAvlFlag);
+	
+		if(ret == kStatus_Success)
+		{
+
+			if(rxFrame.format == kFLEXCAN_FrameFormatStandard) {
+				msg->id = rxFrame.id >> CAN_ID_STD_SHIFT;
+				msg->format = CANStandard;
+			}
+			else {
+				msg->id = rxFrame.id >> CAN_ID_EXT_SHIFT;
+				msg->format = CANExtended;
+			}
+			
+			msg->len = rxFrame.length;
+
+			if(rxFrame.type == kFLEXCAN_FrameTypeData) {
+				msg->type = CANData;
+						
+				msg->data[0] = rxFrame.dataByte0;
+				msg->data[1] = rxFrame.dataByte1;
+				msg->data[2] = rxFrame.dataByte2;
+				msg->data[3] = rxFrame.dataByte3;
+				msg->data[4] = rxFrame.dataByte4;
+				msg->data[5] = rxFrame.dataByte5;
+				msg->data[6] = rxFrame.dataByte6;
+				msg->data[7] = rxFrame.dataByte7;
+			}
+			else
+				msg->type = CANRemote;
+
+			return 1;
+		}
+	}
 
     return 0;
 }
@@ -394,7 +436,10 @@ unsigned char can_tderror(can_t *obj) {
 }
 
 void can_monitor(can_t *obj, int silent) {
-
+	if(silent == 1)
+		can_mode(obj, MODE_SILENT);
+	else
+		can_mode(obj, MODE_NORMAL);
 }
 
 const PinMap *can_rd_pinmap()
