@@ -37,8 +37,8 @@ status_t returnstatus;
 /* Array of CAN peripheral base address. */
 static CAN_Type *const can_addrs[] = CAN_BASE_PTRS;
 
-#define RX_MESSAGE_BUFFER_NUM (10)
-#define TX_MESSAGE_BUFFER_NUM (9)
+#define RX_MESSAGE_BUFFER_NUM (1)
+#define TX_MESSAGE_BUFFER_NUM (15)
 
 static uintptr_t can_irq_contexts[CAN_NUM] = {0};
 static can_irq_handler irq_handler;
@@ -166,6 +166,7 @@ static unsigned int can_speed(unsigned int sclk, unsigned int pclk, unsigned int
 void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
 	CAN_Type *base;
 	flexcan_rx_fifo_config_t rxFifoConfig;
+    flexcan_rx_mb_config_t mbConfig;
 
     // Map pins
     pin_function(pinmap->rd_pin, pinmap->rd_function);
@@ -183,7 +184,7 @@ void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
 
     obj->flexcanConfig.baudRate = hz;
     // Set individual mask mode
-	//obj->flexcanConfig.enableIndividMask = true;
+	obj->flexcanConfig.enableIndividMask = true;
 
 #if 0 // I think that FLEXCAN_CalculateImprovedTimingValues is broken in this SDK
     memset(&(obj->timingConfig), 0, sizeof(flexcan_timing_config_t));
@@ -217,22 +218,15 @@ void can_init_freq_direct(can_t *obj, const can_pinmap_t *pinmap, int hz) {
 	// Disable self reception
 	base->MCR |= CAN_MCR_SRXDIS_MASK;
 
-
-	
 	CAN_ExitFreezeMode(base);
 
-	obj->rxFifoFilter[0] = FLEXCAN_RX_FIFO_STD_FILTER_TYPE_A(1, 0, 0);
-	obj->rxFifoFilter[0] = FLEXCAN_RX_FIFO_STD_FILTER_TYPE_A(1, 1, 0);
-	obj->rxFifoFilter[0] = FLEXCAN_RX_FIFO_STD_FILTER_TYPE_A(2, 0, 0);
-	obj->rxFifoFilter[0] = FLEXCAN_RX_FIFO_STD_FILTER_TYPE_A(2, 1, 0);
-
-	rxFifoConfig.idFilterTable = obj->rxFifoFilter;
-	rxFifoConfig.idFilterType  = kFLEXCAN_RxFifoFilterTypeA;
-	rxFifoConfig.idFilterNum   = sizeof(obj->rxFifoFilter) / sizeof(obj->rxFifoFilter[0]);
-	rxFifoConfig.priority      = kFLEXCAN_RxFifoPrioHigh;
-	FLEXCAN_SetRxFifoConfig(base, &rxFifoConfig, true);
-
-	FLEXCAN_SetRxFifoGlobalMask(base, 0);
+	// Setup default mailbox
+    mbConfig.format = kFLEXCAN_FrameFormatStandard;
+    mbConfig.type   = kFLEXCAN_FrameTypeData;
+    mbConfig.id     = FLEXCAN_ID_STD(1);
+    FLEXCAN_SetRxMbConfig(base, RX_MESSAGE_BUFFER_NUM, &mbConfig, true);
+    // Set the mask to 0 to allow all messages
+	FLEXCAN_SetRxIndividualMask(base, RX_MESSAGE_BUFFER_NUM, 0);
 
     printf("Init can init done\n");
 
@@ -279,8 +273,6 @@ int can_write(can_t *obj, CAN_Message msg) {
 	
 	status_t ret;
 	
-	printf("return status %d\n", returnstatus);
-
 	if((base->ESR1 & 0x30) >= 0x10)
 	{
 		printf("Bus Off\n");
@@ -339,14 +331,12 @@ int can_write(can_t *obj, CAN_Message msg) {
 	
 	obj->txFrame.length = (uint8_t)msg.len;
 		
-	txXfer.mbIdx = (uint8_t)(TX_MESSAGE_BUFFER_NUM + obj->index);
+	txXfer.mbIdx = (uint8_t)(TX_MESSAGE_BUFFER_NUM);
 	txXfer.frame = &obj->txFrame;
 	
 	FLEXCAN_SetTxMbConfig(base, txXfer.mbIdx, true);
 	
 	ret = FLEXCAN_TransferSendNonBlocking(base, &obj->flexcanHandle, &txXfer);
-
-	printf("Can write ret %d\n", ret);
 
 	if(ret == kStatus_Success)
 		return 1;
@@ -358,14 +348,15 @@ int can_read(can_t *obj, CAN_Message *msg, int handle) {
 	CAN_Type *base = can_addrs[obj->index];
 	status_t ret;
 	flexcan_frame_t rxFrame;
-
-	if(FLEXCAN_GetMbStatusFlags(base, (uint32_t)kFLEXCAN_RxFifoFrameAvlFlag) != 0)
+	uint32_t u32flag = 1;
+		   
+	if(FLEXCAN_GetMbStatusFlags(base, u32flag << (handle + 1)) != 0)
 	{
-		ret = FLEXCAN_ReadRxFifo(base, &rxFrame);
+		ret = FLEXCAN_ReadRxMb(base, (handle + 1), &rxFrame);
 	
 		printf("Can read ret %d\n", ret);
 		
-		FLEXCAN_ClearMbStatusFlags(base, (uint32_t)kFLEXCAN_RxFifoFrameAvlFlag);
+		FLEXCAN_ClearMbStatusFlags(base, u32flag << (handle + 1));
 	
 		if(ret == kStatus_Success)
 		{
