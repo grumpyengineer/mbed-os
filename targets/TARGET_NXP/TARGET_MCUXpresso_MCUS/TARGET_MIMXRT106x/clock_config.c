@@ -237,6 +237,12 @@ void BOARD_ClockFullSpeed(void)
     /* Set Flexspi clock source. */
     CLOCK_SetMux(kCLOCK_FlexspiMux, 1);
 #endif
+    /* Disable Flexspi2 clock gate. */
+    CLOCK_DisableClock(kCLOCK_FlexSpi2);
+    /* Set FLEXSPI2_PODF. */
+    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 7);
+    /* Set Flexspi2 clock source. */
+    CLOCK_SetMux(kCLOCK_Flexspi2Mux, 1);
     /* Disable CSI clock gate. */
     CLOCK_DisableClock(kCLOCK_Csi);
     /* Set CSI_PODF. */
@@ -672,7 +678,7 @@ void BOARD_ClockOverdrive(void)
     /* Disable Flexspi2 clock gate. */
     CLOCK_DisableClock(kCLOCK_FlexSpi2);
     /* Set FLEXSPI2_PODF. */
-    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 0);
+    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 7);
     /* Set Flexspi2 clock source. */
     CLOCK_SetMux(kCLOCK_Flexspi2Mux, 1);
     /* Disable CSI clock gate. */

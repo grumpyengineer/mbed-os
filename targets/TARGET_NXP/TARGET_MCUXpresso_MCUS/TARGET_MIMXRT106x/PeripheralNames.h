@@ -147,6 +147,12 @@ typedef enum {
     SPI_4 = 4,
 } SPIName;
 
+#define DEVICE_QSPI_COUNT 2
+typedef enum {
+    QSPI_1 = 1,
+	QSPI_2 = 2
+} QSPIName;
+
 #define DEVICE_CAN_COUNT 3
 typedef enum {
     CAN_1 = 1,
