@@ -1,11 +1,4 @@
 /*
- * Copyright 2023 NXP
- * All rights reserved.
- *
- * SPDX-License-Identifier: BSD-3-Clause
- */
-
-/*
  * How to setup clock using clock driver functions:
  *
  * 1. Call CLOCK_InitXXXPLL() to configure corresponding PLL clock.
@@ -22,11 +15,12 @@
 
 /* TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
 !!GlobalInfo
-product: Clocks v11.0
-processor: MIMXRT1052xxxxB
-package_id: MIMXRT1052DVL6B
+product: Clocks v17.0
+processor: MIMXRT1062xxxxB
+package_id: MIMXRT1062DVL6B
 mcu_data: ksdk2_0
-processor_version: 13.0.2
+processor_version: 25.06.10
+board: MIMXRT1060-EVKB
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
 
 #include "clock_config.h"
@@ -45,7 +39,7 @@ processor_version: 13.0.2
  ******************************************************************************/
 void BOARD_InitBootClocks(void)
 {
-    BOARD_ClockOverdrive();
+    BOARD_ClockFullSpeed();
 }
 
 /*******************************************************************************
@@ -54,6 +48,7 @@ void BOARD_InitBootClocks(void)
 /* TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
 !!Configuration
 name: BOARD_ClockFullSpeed
+called_from_default_init: true
 outputs:
 - {id: AHB_CLK_ROOT.outFreq, value: 528 MHz}
 - {id: CAN_CLK_ROOT.outFreq, value: 40 MHz}
@@ -66,14 +61,14 @@ outputs:
 - {id: ENET_25M_REF_CLK.outFreq, value: 1.2 MHz}
 - {id: FLEXIO1_CLK_ROOT.outFreq, value: 30 MHz}
 - {id: FLEXIO2_CLK_ROOT.outFreq, value: 30 MHz}
+- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 108 MHz}
 - {id: FLEXSPI_CLK_ROOT.outFreq, value: 160 MHz}
-- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 24 MHz}
 - {id: GPT1_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: GPT2_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: IPG_CLK_ROOT.outFreq, value: 132 MHz}
 - {id: LCDIF_CLK_ROOT.outFreq, value: 67.5 MHz}
 - {id: LPI2C_CLK_ROOT.outFreq, value: 10 MHz}
-- {id: LPSPI_CLK_ROOT.outFreq, value: 2880/77 MHz}
+- {id: LPSPI_CLK_ROOT.outFreq, value: 105.6 MHz}
 - {id: LVDS1_CLK.outFreq, value: 1.056 GHz}
 - {id: MQS_MCLK.outFreq, value: 1080/17 MHz}
 - {id: PERCLK_CLK_ROOT.outFreq, value: 24 MHz}
@@ -92,16 +87,17 @@ outputs:
 - {id: SPDIF0_CLK_ROOT.outFreq, value: 30 MHz}
 - {id: TRACE_CLK_ROOT.outFreq, value: 352/3 MHz}
 - {id: UART_CLK_ROOT.outFreq, value: 24 MHz}
-- {id: USDHC1_CLK_ROOT.outFreq, value: 198 MHz}
-- {id: USDHC2_CLK_ROOT.outFreq, value: 198 MHz}
+- {id: USDHC1_CLK_ROOT.outFreq, value: 176 MHz}
+- {id: USDHC2_CLK_ROOT.outFreq, value: 176 MHz}
 settings:
 - {id: CCM.AHB_PODF.scale, value: '1', locked: true}
 - {id: CCM.ARM_PODF.scale, value: '2', locked: true}
+- {id: CCM.FLEXSPI2_PODF.scale, value: '5', locked: true}
+- {id: CCM.FLEXSPI2_SEL.sel, value: CCM_ANALOG.PLL3_PFD1_CLK}
 - {id: CCM.FLEXSPI_PODF.scale, value: '3', locked: true}
 - {id: CCM.FLEXSPI_SEL.sel, value: CCM.PLL3_SW_CLK_SEL}
 - {id: CCM.LPI2C_CLK_PODF.scale, value: '6', locked: true}
-- {id: CCM.LPSPI_CLK_SEL.sel, value: CCM_ANALOG.PLL3_PFD0_CLK}
-- {id: CCM.LPSPI_PODF.scale, value: '7', locked: true}
+- {id: CCM.LPSPI_PODF.scale, value: '5', locked: true}
 - {id: CCM.PERCLK_CLK_SEL.sel, value: XTALOSC24M.OSC_CLK}
 - {id: CCM.PERCLK_PODF.scale, value: '1', locked: true}
 - {id: CCM.SEMC_PODF.scale, value: '8'}
@@ -116,6 +112,7 @@ settings:
 - {id: CCM_ANALOG.PLL2_PFD0_BYPASS.sel, value: CCM_ANALOG.PLL2_PFD0}
 - {id: CCM_ANALOG.PLL2_PFD1_BYPASS.sel, value: CCM_ANALOG.PLL2_PFD1}
 - {id: CCM_ANALOG.PLL2_PFD2_BYPASS.sel, value: CCM_ANALOG.PLL2_PFD2}
+- {id: CCM_ANALOG.PLL2_PFD2_DIV.scale, value: '27'}
 - {id: CCM_ANALOG.PLL2_PFD3_BYPASS.sel, value: CCM_ANALOG.PLL2_PFD3}
 - {id: CCM_ANALOG.PLL3_BYPASS.sel, value: CCM_ANALOG.PLL3}
 - {id: CCM_ANALOG.PLL3_PFD0_BYPASS.sel, value: CCM_ANALOG.PLL3_PFD0}
@@ -240,9 +237,9 @@ void BOARD_ClockFullSpeed(void)
     /* Disable Flexspi2 clock gate. */
     CLOCK_DisableClock(kCLOCK_FlexSpi2);
     /* Set FLEXSPI2_PODF. */
-    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 7);
+    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 4);
     /* Set Flexspi2 clock source. */
-    CLOCK_SetMux(kCLOCK_Flexspi2Mux, 1);
+    CLOCK_SetMux(kCLOCK_Flexspi2Mux, 2);
     /* Disable CSI clock gate. */
     CLOCK_DisableClock(kCLOCK_Csi);
     /* Set CSI_PODF. */
@@ -255,9 +252,9 @@ void BOARD_ClockFullSpeed(void)
     CLOCK_DisableClock(kCLOCK_Lpspi3);
     CLOCK_DisableClock(kCLOCK_Lpspi4);
     /* Set LPSPI_PODF. */
-    CLOCK_SetDiv(kCLOCK_LpspiDiv, 6);
+    CLOCK_SetDiv(kCLOCK_LpspiDiv, 4);
     /* Set Lpspi clock source. */
-    CLOCK_SetMux(kCLOCK_LpspiMux, 1);
+    CLOCK_SetMux(kCLOCK_LpspiMux, 2);
     /* Disable TRACE clock gate. */
     CLOCK_DisableClock(kCLOCK_Trace);
     /* Set TRACE_PODF. */
@@ -370,7 +367,7 @@ void BOARD_ClockFullSpeed(void)
     /* Init System pfd1. */
     CLOCK_InitSysPfd(kCLOCK_Pfd1, 16);
     /* Init System pfd2. */
-    CLOCK_InitSysPfd(kCLOCK_Pfd2, 24);
+    CLOCK_InitSysPfd(kCLOCK_Pfd2, 27);
     /* Init System pfd3. */
     CLOCK_InitSysPfd(kCLOCK_Pfd3, 16);
 #endif
@@ -416,6 +413,10 @@ void BOARD_ClockFullSpeed(void)
     CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_DIV_SELECT(1);
     /* Enable Enet output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENABLE_MASK;
+    /* Set Enet2 output divider. */
+    CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT(0);
+    /* Enable Enet2 output. */
+    CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET2_REF_EN_MASK;
     /* Enable Enet25M output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET_25M_REF_EN_MASK;
     /* DeInit Usb2 PLL. */
@@ -461,14 +462,9 @@ void BOARD_ClockFullSpeed(void)
     /* Set MQS configuration. */
     IOMUXC_MQSConfig(IOMUXC_GPR,kIOMUXC_MqsPwmOverSampleRate32, 0);
     /* Set ENET Ref clock source. */
-#if defined(IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK)
-    IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK;
-#elif defined(IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK)
-    /* Backward compatibility for original bitfield name */
     IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK;
-#else
-#error "Neither IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK nor IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK is defined."
-#endif /* defined(IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK) */
+    /* Set ENET2 Ref clock source. */
+    IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET2_TX_CLK_DIR_MASK;
     /* Set GPT1 High frequency reference clock source. */
     IOMUXC_GPR->GPR5 &= ~IOMUXC_GPR_GPR5_VREF_1M_CLK_GPT1_MASK;
     /* Set GPT2 High frequency reference clock source. */
@@ -483,7 +479,6 @@ void BOARD_ClockFullSpeed(void)
 /* TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
 !!Configuration
 name: BOARD_ClockOverdrive
-called_from_default_init: true
 outputs:
 - {id: AHB_CLK_ROOT.outFreq, value: 600 MHz}
 - {id: CAN_CLK_ROOT.outFreq, value: 40 MHz}
@@ -496,14 +491,14 @@ outputs:
 - {id: ENET_25M_REF_CLK.outFreq, value: 1.2 MHz}
 - {id: FLEXIO1_CLK_ROOT.outFreq, value: 30 MHz}
 - {id: FLEXIO2_CLK_ROOT.outFreq, value: 30 MHz}
+- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 108 MHz}
 - {id: FLEXSPI_CLK_ROOT.outFreq, value: 160 MHz}
-- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 24 MHz}
 - {id: GPT1_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: GPT2_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: IPG_CLK_ROOT.outFreq, value: 150 MHz}
 - {id: LCDIF_CLK_ROOT.outFreq, value: 67.5 MHz}
 - {id: LPI2C_CLK_ROOT.outFreq, value: 10 MHz}
-- {id: LPSPI_CLK_ROOT.outFreq, value: 2880/77 MHz}
+- {id: LPSPI_CLK_ROOT.outFreq, value: 105.6 MHz}
 - {id: LVDS1_CLK.outFreq, value: 1.2 GHz}
 - {id: MQS_MCLK.outFreq, value: 1080/17 MHz}
 - {id: PERCLK_CLK_ROOT.outFreq, value: 24 MHz}
@@ -527,13 +522,12 @@ outputs:
 settings:
 - {id: CCM.AHB_PODF.scale, value: '1', locked: true}
 - {id: CCM.ARM_PODF.scale, value: '2', locked: true}
-- {id: CCM.FLEXSPI2_PODF.scale, value: '3', locked: true}
-- {id: CCM.FLEXSPI2_SEL.sel, value: CCM.PLL3_SW_CLK_SEL}
+- {id: CCM.FLEXSPI2_PODF.scale, value: '5', locked: true}
+- {id: CCM.FLEXSPI2_SEL.sel, value: CCM_ANALOG.PLL3_PFD1_CLK}
 - {id: CCM.FLEXSPI_PODF.scale, value: '3', locked: true}
 - {id: CCM.FLEXSPI_SEL.sel, value: CCM.PLL3_SW_CLK_SEL}
 - {id: CCM.LPI2C_CLK_PODF.scale, value: '6', locked: true}
-- {id: CCM.LPSPI_CLK_SEL.sel, value: CCM_ANALOG.PLL3_PFD0_CLK}
-- {id: CCM.LPSPI_PODF.scale, value: '7', locked: true}
+- {id: CCM.LPSPI_PODF.scale, value: '5', locked: true}
 - {id: CCM.PERCLK_CLK_SEL.sel, value: XTALOSC24M.OSC_CLK}
 - {id: CCM.PERCLK_PODF.scale, value: '1', locked: true}
 - {id: CCM.SEMC_PODF.scale, value: '8'}
@@ -678,9 +672,9 @@ void BOARD_ClockOverdrive(void)
     /* Disable Flexspi2 clock gate. */
     CLOCK_DisableClock(kCLOCK_FlexSpi2);
     /* Set FLEXSPI2_PODF. */
-    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 7);
+    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 4);
     /* Set Flexspi2 clock source. */
-    CLOCK_SetMux(kCLOCK_Flexspi2Mux, 1);
+    CLOCK_SetMux(kCLOCK_Flexspi2Mux, 2);
     /* Disable CSI clock gate. */
     CLOCK_DisableClock(kCLOCK_Csi);
     /* Set CSI_PODF. */
@@ -693,9 +687,9 @@ void BOARD_ClockOverdrive(void)
     CLOCK_DisableClock(kCLOCK_Lpspi3);
     CLOCK_DisableClock(kCLOCK_Lpspi4);
     /* Set LPSPI_PODF. */
-    CLOCK_SetDiv(kCLOCK_LpspiDiv, 6);
+    CLOCK_SetDiv(kCLOCK_LpspiDiv, 4);
     /* Set Lpspi clock source. */
-    CLOCK_SetMux(kCLOCK_LpspiMux, 1);
+    CLOCK_SetMux(kCLOCK_LpspiMux, 2);
     /* Disable TRACE clock gate. */
     CLOCK_DisableClock(kCLOCK_Trace);
     /* Set TRACE_PODF. */
@@ -737,7 +731,7 @@ void BOARD_ClockOverdrive(void)
     /* Disable CAN clock gate. */
     CLOCK_DisableClock(kCLOCK_Can1);
     CLOCK_DisableClock(kCLOCK_Can2);
-	CLOCK_DisableClock(kCLOCK_Can3);
+    CLOCK_DisableClock(kCLOCK_Can3);
     CLOCK_DisableClock(kCLOCK_Can1S);
     CLOCK_DisableClock(kCLOCK_Can2S);
     CLOCK_DisableClock(kCLOCK_Can3S);
@@ -854,6 +848,10 @@ void BOARD_ClockOverdrive(void)
     CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_DIV_SELECT(1);
     /* Enable Enet output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENABLE_MASK;
+    /* Set Enet2 output divider. */
+    CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT(0);
+    /* Enable Enet2 output. */
+    CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET2_REF_EN_MASK;
     /* Enable Enet25M output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET_25M_REF_EN_MASK;
     /* DeInit Usb2 PLL. */
@@ -899,14 +897,9 @@ void BOARD_ClockOverdrive(void)
     /* Set MQS configuration. */
     IOMUXC_MQSConfig(IOMUXC_GPR,kIOMUXC_MqsPwmOverSampleRate32, 0);
     /* Set ENET Ref clock source. */
-#if defined(IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK)
-    IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK;
-#elif defined(IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK)
-    /* Backward compatibility for original bitfield name */
     IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK;
-#else
-#error "Neither IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK nor IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK is defined."
-#endif /* defined(IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK) */
+    /* Set ENET2 Ref clock source. */
+    IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET2_TX_CLK_DIR_MASK;
     /* Set GPT1 High frequency reference clock source. */
     IOMUXC_GPR->GPR5 &= ~IOMUXC_GPR_GPR5_VREF_1M_CLK_GPT1_MASK;
     /* Set GPT2 High frequency reference clock source. */
@@ -933,14 +926,14 @@ outputs:
 - {id: ENET_25M_REF_CLK.outFreq, value: 1.2 MHz}
 - {id: FLEXIO1_CLK_ROOT.outFreq, value: 1.5 MHz}
 - {id: FLEXIO2_CLK_ROOT.outFreq, value: 1.5 MHz}
+- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 12 MHz}
 - {id: FLEXSPI_CLK_ROOT.outFreq, value: 24 MHz}
-- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 24 MHz}
 - {id: GPT1_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: GPT2_ipg_clk_highfreq.outFreq, value: 24 MHz}
 - {id: IPG_CLK_ROOT.outFreq, value: 12 MHz}
 - {id: LCDIF_CLK_ROOT.outFreq, value: 3 MHz}
 - {id: LPI2C_CLK_ROOT.outFreq, value: 3 MHz}
-- {id: LPSPI_CLK_ROOT.outFreq, value: 3 MHz}
+- {id: LPSPI_CLK_ROOT.outFreq, value: 12 MHz}
 - {id: LVDS1_CLK.outFreq, value: 24 MHz}
 - {id: MQS_MCLK.outFreq, value: 3 MHz}
 - {id: PERCLK_CLK_ROOT.outFreq, value: 24 MHz}
@@ -964,8 +957,7 @@ outputs:
 settings:
 - {id: CCM.FLEXSPI_PODF.scale, value: '1', locked: true}
 - {id: CCM.IPG_PODF.scale, value: '2', locked: true}
-- {id: CCM.LPSPI_CLK_SEL.sel, value: CCM_ANALOG.PLL3_PFD0_CLK}
-- {id: CCM.LPSPI_PODF.scale, value: '8', locked: true}
+- {id: CCM.LPSPI_PODF.scale, value: '2', locked: true}
 - {id: CCM.PERCLK_CLK_SEL.sel, value: XTALOSC24M.OSC_CLK}
 - {id: CCM.PERIPH_CLK2_SEL.sel, value: XTALOSC24M.OSC_CLK}
 - {id: CCM.PERIPH_CLK_SEL.sel, value: CCM.PERIPH_CLK2_PODF}
@@ -1061,6 +1053,12 @@ void BOARD_ClockLowPower(void)
     /* Set Flexspi clock source. */
     CLOCK_SetMux(kCLOCK_FlexspiMux, 0);
 #endif
+    /* Disable Flexspi2 clock gate. */
+    CLOCK_DisableClock(kCLOCK_FlexSpi2);
+    /* Set FLEXSPI2_PODF. */
+    CLOCK_SetDiv(kCLOCK_Flexspi2Div, 1);
+    /* Set Flexspi2 clock source. */
+    CLOCK_SetMux(kCLOCK_Flexspi2Mux, 3);
     /* Disable CSI clock gate. */
     CLOCK_DisableClock(kCLOCK_Csi);
     /* Set CSI_PODF. */
@@ -1073,9 +1071,9 @@ void BOARD_ClockLowPower(void)
     CLOCK_DisableClock(kCLOCK_Lpspi3);
     CLOCK_DisableClock(kCLOCK_Lpspi4);
     /* Set LPSPI_PODF. */
-    CLOCK_SetDiv(kCLOCK_LpspiDiv, 7);
+    CLOCK_SetDiv(kCLOCK_LpspiDiv, 1);
     /* Set Lpspi clock source. */
-    CLOCK_SetMux(kCLOCK_LpspiMux, 1);
+    CLOCK_SetMux(kCLOCK_LpspiMux, 2);
     /* Disable TRACE clock gate. */
     CLOCK_DisableClock(kCLOCK_Trace);
     /* Set TRACE_PODF. */
@@ -1229,8 +1227,7 @@ void BOARD_ClockLowPower(void)
     /* Enable Enet output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENABLE_MASK;
     /* Set Enet2 output divider. */
-    CCM_ANALOG->PLL_ENET =
-        (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT(0);
+    CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT(0);
     /* Enable Enet2 output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET2_REF_EN_MASK;
     /* Enable Enet25M output. */
@@ -1280,14 +1277,9 @@ void BOARD_ClockLowPower(void)
     /* Set MQS configuration. */
     IOMUXC_MQSConfig(IOMUXC_GPR,kIOMUXC_MqsPwmOverSampleRate32, 0);
     /* Set ENET Ref clock source. */
-#if defined(IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK)
-    IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK;
-#elif defined(IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK)
-    /* Backward compatibility for original bitfield name */
     IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK;
-#else
-#error "Neither IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK nor IOMUXC_GPR_GPR1_ENET1_TX_CLK_DIR_MASK is defined."
-#endif /* defined(IOMUXC_GPR_GPR1_ENET_REF_CLK_DIR_MASK) */
+    /* Set ENET2 Ref clock source. */
+    IOMUXC_GPR->GPR1 &= ~IOMUXC_GPR_GPR1_ENET2_TX_CLK_DIR_MASK;
     /* Set GPT1 High frequency reference clock source. */
     IOMUXC_GPR->GPR5 &= ~IOMUXC_GPR_GPR5_VREF_1M_CLK_GPT1_MASK;
     /* Set GPT2 High frequency reference clock source. */
