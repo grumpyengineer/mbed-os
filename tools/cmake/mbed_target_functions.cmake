@@ -28,7 +28,7 @@ function(mbed_generate_bin_hex target)
     # tools can support. For example, GDB load command supports Intel HEX format
     # but no BIN format.
     list(APPEND CMAKE_POST_BUILD_COMMAND
-        COMMAND ${elf_to_bin} -O ihex $<TARGET_FILE:${target}> ${CMAKE_CURRENT_BINARY_DIR}/${artifact_name}.hex
+        COMMAND ${elf_to_bin} --gap-fill 0x00 -O ihex $<TARGET_FILE:${target}> ${CMAKE_CURRENT_BINARY_DIR}/${artifact_name}.hex
         COMMAND ${CMAKE_COMMAND} -E echo "-- built: ${CMAKE_CURRENT_BINARY_DIR}/${artifact_name}.hex"
     )
 
