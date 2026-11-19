@@ -17,6 +17,7 @@ target_include_directories(mbed-mimxrt106x
         .
         device
         drivers
+	board
 )
 
 target_sources(mbed-mimxrt106x
@@ -28,7 +29,7 @@ target_sources(mbed-mimxrt106x
         sleep.c
         trng_api.c
         us_ticker.c
-        clock_config.c
+        board/clock_config.c
         PeripheralPins.c
         pinmap.c
         mbed_overrides.c

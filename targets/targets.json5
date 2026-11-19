@@ -4794,7 +4794,6 @@ mode is recommended for target MCUs with small amounts of flash and RAM.",
             "XIP_BOOT_HEADER_ENABLE=1",
             "XIP_EXTERNAL_FLASH=1",
             "FSL_SDK_DRIVER_QUICK_ACCESS_ENABLE=1",
-            "SKIP_SYSCLK_INIT",
             "__STARTUP_INITIALIZE_RAMFUNCTION",
             "__STARTUP_INITIALIZE_NONCACHEDATA",
             "MBED_MPU_CUSTOM",
@@ -4853,7 +4852,6 @@ mode is recommended for target MCUs with small amounts of flash and RAM.",
             "XIP_BOOT_HEADER_ENABLE=1",
             "XIP_EXTERNAL_FLASH=1",
             "FSL_SDK_DRIVER_QUICK_ACCESS_ENABLE=1",
-            "SKIP_SYSCLK_INIT",
             "__STARTUP_INITIALIZE_RAMFUNCTION",
             "__STARTUP_INITIALIZE_NONCACHEDATA",
             "MBED_MPU_CUSTOM",
@@ -4911,7 +4909,8 @@ mode is recommended for target MCUs with small amounts of flash and RAM.",
         "macros_add": [
             "HYPERFLASH_BOOT",
             "XIP_BOOT_HEADER_DCD_ENABLE=1",
-            "FSL_FEATURE_PHYKSZ8081_USE_RMII50M_MODE"
+            "FSL_FEATURE_PHYKSZ8081_USE_RMII50M_MODE",
+			"SKIP_SYSCLK_INIT" // Don't configure PLL2 (Sys PLL) in clock_config.c as it's configured by DCD
         ],
         "device_has_add": [
             "FLASH"
@@ -4965,7 +4964,8 @@ mode is recommended for target MCUs with small amounts of flash and RAM.",
         ],
         "macros_add": [
             "XIP_BOOT_HEADER_DCD_ENABLE=1",
-            "FSL_FEATURE_PHYKSZ8081_USE_RMII50M_MODE"
+            "FSL_FEATURE_PHYKSZ8081_USE_RMII50M_MODE",
+			"SKIP_SYSCLK_INIT" // Don't configure PLL2 (Sys PLL) in clock_config.c as it's configured by DCD
         ],
         "device_has_add": [
             "FLASH"
@@ -5019,7 +5019,8 @@ mode is recommended for target MCUs with small amounts of flash and RAM.",
         ],
         "macros_add": [
             "XIP_BOOT_HEADER_DCD_ENABLE=1",
-            "FSL_FEATURE_PHYKSZ8081_USE_RMII50M_MODE"
+            "FSL_FEATURE_PHYKSZ8081_USE_RMII50M_MODE",
+			"SKIP_SYSCLK_INIT" // Don't configure PLL2 (Sys PLL) in clock_config.c as it's configured by DCD
         ],
         "device_has_add": [
             "FLASH"
