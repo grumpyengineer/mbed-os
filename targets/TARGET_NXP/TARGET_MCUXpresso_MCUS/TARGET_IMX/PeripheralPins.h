@@ -44,10 +44,15 @@ extern const PinMap PinMap_SPI_SCLK[];
 extern const PinMap PinMap_SPI_MOSI[];
 extern const PinMap PinMap_SPI_MISO[];
 extern const PinMap PinMap_SPI_SSEL[];
-
+/************QSPI***************/
+extern const PinMap PinMap_QSPI_DATA0[];
+extern const PinMap PinMap_QSPI_DATA1[];
+extern const PinMap PinMap_QSPI_DATA2[];
+extern const PinMap PinMap_QSPI_DATA3[];
+extern const PinMap PinMap_QSPI_SCLK[];
+extern const PinMap PinMap_QSPI_SSEL[];
 /************PWM***************/
 extern const PinMap PinMap_PWM[];
-
 /************CAN***************/
 extern const PinMap PinMap_CAN_TD[];
 extern const PinMap PinMap_CAN_RD[];

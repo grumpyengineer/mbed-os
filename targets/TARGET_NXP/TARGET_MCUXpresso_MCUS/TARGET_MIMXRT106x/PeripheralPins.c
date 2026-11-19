@@ -57,12 +57,50 @@ const PinMap PinMap_RTC[] = {
 
 /************ADC***************/
 const PinMap PinMap_ADC[] = {
-    {GPIO_AD_B1_10, ADC1_15, 5},
-    {GPIO_AD_B1_11, ADC2_0,  5},
+/*
+    {GPIO_AD_B1_11, ADC1_0,  5},
+	{GPIO_AD_B0_12, ADC1_1,  5},
+	{GPIO_AD_B0_13, ADC1_2,  5},
+	{GPIO_AD_B0_14, ADC1_3,  5},
+	{GPIO_AD_B0_15, ADC1_4,  5},
+	{GPIO_AD_B1_00, ADC1_5,  5},
+    {GPIO_AD_B1_01, ADC1_6,  5},
+	{GPIO_AD_B1_02, ADC1_7,  5},
+	{GPIO_AD_B1_03, ADC1_8,  5},
     {GPIO_AD_B1_04, ADC1_9,  5},
     {GPIO_AD_B1_05, ADC1_10, 5},
+	{GPIO_AD_B1_06, ADC1_11,  5},
+	{GPIO_AD_B1_07, ADC1_12,  5},
+	{GPIO_AD_B1_08, ADC1_13,  5},
+	{GPIO_AD_B1_09, ADC1_14,  5},
+    {GPIO_AD_B1_10, ADC1_15, 5},
+    {GPIO_AD_B1_11, ADC2_0,  5},
+	{GPIO_AD_B1_12, ADC2_1,  5},
+	{GPIO_AD_B1_13, ADC2_2,  5},
+	{GPIO_AD_B1_14, ADC2_3,  5},
+	{GPIO_AD_B1_15, ADC2_4,  5},
+	{GPIO_AD_B1_00, ADC2_5,  5},
+	{GPIO_AD_B1_01, ADC2_6,  5},
+	{GPIO_AD_B1_02, ADC2_7,  5},	
+	{GPIO_AD_B1_03, ADC2_8,  5},
+	{GPIO_AD_B1_04, ADC2_9,  5},
+	{GPIO_AD_B1_05, ADC2_10,  5},
+	{GPIO_AD_B1_06, ADC2_11,  5},
+	{GPIO_AD_B1_07, ADC2_12,  5},
+	{GPIO_AD_B1_08, ADC2_13,  5},
+	{GPIO_AD_B1_09, ADC2_14, 5},
+	{GPIO_AD_B1_10, ADC2_15,  5},
+*/
+	{GPIO_AD_B1_10, ADC1_15, 5},
+    {GPIO_AD_B1_11, ADC2_0,  5},
+    {GPIO_AD_B1_04, ADC1_9,  5},
+    {GPIO_AD_B1_05, ADC2_10, 5},
     {GPIO_AD_B1_01, ADC1_6,  5},
     {GPIO_AD_B1_00, ADC1_5,  5},
+	{GPIO_AD_B1_03, ADC1_8,  5},
+	{GPIO_AD_B1_09, ADC2_14, 5},
+	{GPIO_AD_B1_12, ADC2_1,  5},
+	{GPIO_AD_B1_02, ADC2_7,  5},
     {NC   , NC       , 0}
 };
 
@@ -218,6 +256,38 @@ const PinMap PinMap_SPI_SSEL[] = {
     {GPIO_AD_B0_03, SPI_3, ((0U << DAISY_REG_VALUE_SHIFT) | (0x50C << DAISY_REG_SHIFT) | 7)},
     {GPIO_B0_00,    SPI_4, ((0U << DAISY_REG_VALUE_SHIFT) | (0x51C << DAISY_REG_SHIFT) | 3)},
     {NC   , NC   , 0}
+};
+
+/************QSPI***************/
+
+const PinMap PinMap_QSPI_DATA0[] = {
+    {GPIO_EMC_26, QSPI_2, ((1U << DAISY_REG_VALUE_SHIFT) | (0x730 << DAISY_REG_SHIFT) | 8)},
+    {NC, NC, 0}
+};
+
+const PinMap PinMap_QSPI_DATA1[] = {
+    {GPIO_EMC_27, QSPI_2, ((1U << DAISY_REG_VALUE_SHIFT) | (0x734 << DAISY_REG_SHIFT) | 8)},
+    {NC, NC, 0}
+};
+
+const PinMap PinMap_QSPI_DATA2[] = {
+    {GPIO_EMC_28, QSPI_2, ((1U << DAISY_REG_VALUE_SHIFT) | (0x738 << DAISY_REG_SHIFT) | 8)},
+    {NC, NC, 0}
+};
+
+const PinMap PinMap_QSPI_DATA3[] = {
+    {GPIO_EMC_29, QSPI_2, ((1U << DAISY_REG_VALUE_SHIFT) | (0x73c << DAISY_REG_SHIFT) | 8)},
+    {NC, NC, 0}
+};
+
+const PinMap PinMap_QSPI_SCLK[] = {
+    {GPIO_EMC_25, QSPI_2, ((1U << DAISY_REG_VALUE_SHIFT) | (0x750 << DAISY_REG_SHIFT) | 8)},
+    {NC   , NC    , 0}
+};
+
+const PinMap PinMap_QSPI_SSEL[] = {
+    {GPIO_EMC_24, QSPI_2, 8},
+    {NC   , NC    , 0}
 };
 
 /************PWM***************/
