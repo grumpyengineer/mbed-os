@@ -73,7 +73,7 @@ extern "C" void kinetis_init_eth_hardware(void);
 #define FLAG_RX  2
 
 /** \brief  Driver thread priority */
-#define THREAD_PRIORITY (osPriorityAboveNormal6)
+#define THREAD_PRIORITY (osPriorityNormal)
 
 #define PHY_TASK_PERIOD      100ms
 
@@ -168,9 +168,7 @@ void Kinetis_EMAC::rx_isr()
 
 void Kinetis_EMAC::tx_isr()
 {
-    if (thread) {
-        osThreadFlagsSet(thread, FLAG_TX);
-    }
+    osThreadFlagsSet(thread, FLAG_TX);
 }
 
 void Kinetis_EMAC::ethernet_callback(ENET_Type *base, enet_handle_t *handle, enet_event_t event, void *param)
@@ -349,18 +347,13 @@ void Kinetis_EMAC::thread_function(void *pvParameters)
         uint32_t flags = osThreadFlagsWait(FLAG_RX | FLAG_TX, osFlagsWaitAny, osWaitForever);
 
         MBED_ASSERT(!(flags & osFlagsError));
-        if ((flags & 0x80000000) == 0) {
-            if (flags & FLAG_RX) {
-                kinetis_enet->packet_rx();
-            }
 
-            if (flags & FLAG_TX) {
-                kinetis_enet->packet_tx();
-            }
+        if (flags & FLAG_RX) {
+            kinetis_enet->packet_rx();
         }
-        else
-        {
-            printf("Got bad flags! %08lx\n", flags);
+
+        if (flags & FLAG_TX) {
+            kinetis_enet->packet_tx();
         }
     }
 }
